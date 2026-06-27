@@ -449,34 +449,6 @@ input:disabled {
   gap: 14px;
 }
 
-.project-form-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.field {
-  display: grid;
-  gap: 6px;
-}
-
-.field span {
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.field input {
-  min-height: 40px;
-  padding: 0 10px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--panel);
-}
-
-.field-wide {
-  grid-column: 1 / -1;
-}
-
 .project-form-actions {
   display: flex;
   gap: 10px;
@@ -622,10 +594,6 @@ pre {
   .cluster-summary,
   .node-layout,
   .node-row {
-    grid-template-columns: 1fr;
-  }
-
-  .project-form-grid {
     grid-template-columns: 1fr;
   }
 

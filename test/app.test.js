@@ -352,10 +352,61 @@ test("projects delete route delegates to the effective-state registry", async ()
   }
 });
 
+test("projects source route lists Git-defined projects", async () => {
+  const server = await listen({
+    sourceProjectRegistry: {
+      async listApps() {
+        return [appConfig, secondAppConfig];
+      }
+    }
+  });
+
+  try {
+    const data = await request(server, "/api/projects/source");
+
+    assert.deepEqual(data.projects.map((project) => project.id), ["demo-hello", "demo-hello-spring"]);
+  } finally {
+    await close(server);
+  }
+});
+
+test("projects sync route imports a Git-defined project into the effective registry", async () => {
+  const calls = [];
+  const server = await listen({
+    sourceProjectRegistry: {
+      async getApp(id) {
+        assert.equal(id, "demo-hello-spring");
+        return secondAppConfig;
+      }
+    },
+    appRegistry: {
+      async listApps() {
+        return [appConfig];
+      },
+      async syncApp(project) {
+        calls.push(project.id);
+        return project;
+      }
+    }
+  });
+
+  try {
+    const data = await request(server, "/api/projects/demo-hello-spring/sync", {
+      method: "POST"
+    });
+
+    assert.equal(data.project.id, "demo-hello-spring");
+    assert.deepEqual(calls, ["demo-hello-spring"]);
+  } finally {
+    await close(server);
+  }
+});
+
 async function listen(overrides = {}) {
   const app = createApp({
     apps: [appConfig],
     appRegistry: overrides.appRegistry,
+    sourceProjectRegistry: overrides.sourceProjectRegistry,
     github: overrides.github || {
       async listWorkflowRuns() {
         return [];

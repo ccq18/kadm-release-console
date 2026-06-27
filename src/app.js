@@ -2,16 +2,17 @@ import express from "express";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { ReleaseManager } from "./release-manager.js";
-import { createStaticAppRegistry, publicProject } from "./projects.js";
+import { createStaticAppRegistry, createStaticSourceProjectRegistry, publicProject } from "./projects.js";
 import { deriveRolloutVersions, validatePromoteVersion } from "./versions.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-export function createApp({ apps, appRegistry, github, argocd, rollouts, releaseManager, cluster }) {
+export function createApp({ apps, appRegistry, sourceProjectRegistry, github, argocd, rollouts, releaseManager, cluster }) {
   const server = express();
   const releases = releaseManager || new ReleaseManager({ github, argocd, rollouts });
   const registry = appRegistry || createStaticAppRegistry(apps || []);
+  const sourceRegistry = sourceProjectRegistry || createStaticSourceProjectRegistry(apps || []);
 
   server.use(express.json({ limit: "64kb" }));
   server.use(express.static(path.join(__dirname, "../public")));
@@ -36,6 +37,24 @@ export function createApp({ apps, appRegistry, github, argocd, rollouts, release
     try {
       const project = await registry.createApp(req.body || {});
       res.status(201).json({ project: publicProject(project) });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  server.get("/api/projects/source", async (_req, res, next) => {
+    try {
+      res.json({ projects: (await sourceRegistry.listApps()).map(publicProject) });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  server.post("/api/projects/:id/sync", async (req, res, next) => {
+    try {
+      const sourceProject = await sourceRegistry.getApp(req.params.id);
+      const project = await registry.syncApp(sourceProject);
+      res.json({ project: publicProject(project) });
     } catch (error) {
       next(error);
     }

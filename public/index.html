@@ -180,81 +180,32 @@
             <div id="projectList" class="project-list"></div>
           </article>
 
-          <form id="projectForm" class="panel project-form">
+          <section class="panel project-form">
             <div class="panel-heading">
               <div>
-                <h3 id="projectFormTitle">新建项目</h3>
-                <p class="panel-copy">只修改系统生效层：ConfigMap + Argo Application，不回写 Git。</p>
+                <h3>Git 定义项目</h3>
+                <p class="panel-copy">先在 GitOps 仓库定义项目，再导入到系统生效层。</p>
               </div>
             </div>
 
-            <div class="project-form-grid">
-              <label class="field">
-                <span>项目 ID</span>
-                <input id="projectIdInput" type="text" placeholder="myapp">
-              </label>
-              <label class="field">
-                <span>显示名称</span>
-                <input id="projectNameInput" type="text" placeholder="My App">
-              </label>
-
-              <label class="field">
-                <span>源码 owner</span>
-                <input id="projectGithubOwnerInput" type="text" placeholder="ccq18">
-              </label>
-              <label class="field">
-                <span>源码 repo</span>
-                <input id="projectGithubRepoInput" type="text" placeholder="myapp">
-              </label>
-              <label class="field">
-                <span>源码 workflow</span>
-                <input id="projectGithubWorkflowInput" type="text" placeholder="build-and-publish.yaml">
-              </label>
-              <label class="field">
-                <span>源码 ref</span>
-                <input id="projectGithubRefInput" type="text" placeholder="main">
-              </label>
-
-              <label class="field">
-                <span>GitOps owner</span>
-                <input id="projectGitopsOwnerInput" type="text" placeholder="ccq18">
-              </label>
-              <label class="field">
-                <span>GitOps repo</span>
-                <input id="projectGitopsRepoInput" type="text" placeholder="kadm-app-configs">
-              </label>
-              <label class="field field-wide">
-                <span>GitOps path</span>
-                <input id="projectGitopsPathInput" type="text" placeholder="apps/myapp/overlays/prod">
-              </label>
-              <label class="field field-wide">
-                <span>镜像地址</span>
-                <input id="projectGitopsImageInput" type="text" placeholder="ghcr.io/ccq18/myapp">
-              </label>
-              <label class="field">
-                <span>GitOps ref</span>
-                <input id="projectGitopsRefInput" type="text" placeholder="main">
-              </label>
-
-              <label class="field">
-                <span>Argo Application</span>
-                <input id="projectArgocdApplicationInput" type="text" placeholder="myapp">
-              </label>
-              <label class="field">
-                <span>Rollout namespace</span>
-                <input id="projectRolloutNamespaceInput" type="text" placeholder="apps">
-              </label>
-              <label class="field">
-                <span>Rollout name</span>
-                <input id="projectRolloutNameInput" type="text" placeholder="myapp">
-              </label>
+            <div class="panel-heading">
+              <h3>可导入项目</h3>
+              <span id="sourceProjectCount" class="panel-badge">0</span>
             </div>
+            <div id="sourceProjectList" class="project-list"></div>
 
+            <div class="panel-heading">
+              <div>
+                <h3 id="selectedProjectTitle">当前选择</h3>
+                <p class="panel-copy">导入会写入 `kadm-apps-config` 并创建/更新对应 Argo Application；下线只影响系统生效层。</p>
+              </div>
+            </div>
+            <dl id="projectDetails"></dl>
             <div class="project-form-actions">
-              <button id="projectSaveButton" class="primary-action" type="submit">生效保存</button>
-              <button id="projectDeleteButton" class="danger-action" type="button">下线删除</button>
+              <button id="projectSyncButton" class="primary-action" type="button">从 Git 导入/同步</button>
+              <button id="projectDeleteButton" class="danger-action" type="button">从系统下线</button>
             </div>
-          </form>
+          </section>
         </section>
 
         <p id="projectNotice" class="notice" role="status"></p>

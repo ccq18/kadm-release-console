@@ -4,19 +4,22 @@ import { ClusterService } from "./cluster.js";
 import { loadAppsConfig, requireEnv } from "./config.js";
 import { GitHubClient } from "./github.js";
 import { KubernetesRolloutsClient } from "./kubernetes.js";
-import { EffectiveProjectRegistryService } from "./projects.js";
+import { EffectiveProjectRegistryService, GitSourceProjectRegistry } from "./projects.js";
 
 const env = process.env;
 const port = Number.parseInt(env.PORT || "8080", 10);
 const apps = loadAppsConfig();
+const github = new GitHubClient({
+  token: requireEnv(env, "GITHUB_TOKEN")
+});
 const appRegistry = EffectiveProjectRegistryService.fromEnv(env, { fallbackApps: apps });
+const sourceProjectRegistry = new GitSourceProjectRegistry({ github, fallbackApps: apps });
 
 const server = createApp({
   apps,
   appRegistry,
-  github: new GitHubClient({
-    token: requireEnv(env, "GITHUB_TOKEN")
-  }),
+  sourceProjectRegistry,
+  github,
   argocd: new ArgoCdClient({
     baseUrl: requireEnv(env, "ARGOCD_BASE_URL"),
     token: requireEnv(env, "ARGOCD_TOKEN"),

@@ -7,14 +7,14 @@ import {
 } from "./release-state.js";
 
 let apps = [];
-let projects = [];
+let effectiveProjects = [];
+let sourceProjects = [];
 let activeAppId = null;
 let activeProjectId = null;
 let activeView = "release";
 let joinRole = "worker";
 let refreshTimer = null;
 let isRefreshing = false;
-let projectMode = "create";
 
 const appList = document.querySelector("#appList");
 const appTitle = document.querySelector("#appTitle");
@@ -33,27 +33,17 @@ const masterRoleButton = document.querySelector("#masterRoleButton");
 const joinScript = document.querySelector("#joinScript");
 const copyJoinButton = document.querySelector("#copyJoinButton");
 const projectList = document.querySelector("#projectList");
+const sourceProjectList = document.querySelector("#sourceProjectList");
 const projectCount = document.querySelector("#projectCount");
-const projectForm = document.querySelector("#projectForm");
-const projectFormTitle = document.querySelector("#projectFormTitle");
+const sourceProjectCount = document.querySelector("#sourceProjectCount");
+const selectedProjectTitle = document.querySelector("#selectedProjectTitle");
+const projectDetails = document.querySelector("#projectDetails");
+const projectSyncButton = document.querySelector("#projectSyncButton");
 const projectDeleteButton = document.querySelector("#projectDeleteButton");
-const projectIdInput = document.querySelector("#projectIdInput");
-const projectNameInput = document.querySelector("#projectNameInput");
-const projectGithubOwnerInput = document.querySelector("#projectGithubOwnerInput");
-const projectGithubRepoInput = document.querySelector("#projectGithubRepoInput");
-const projectGithubWorkflowInput = document.querySelector("#projectGithubWorkflowInput");
-const projectGithubRefInput = document.querySelector("#projectGithubRefInput");
-const projectGitopsOwnerInput = document.querySelector("#projectGitopsOwnerInput");
-const projectGitopsRepoInput = document.querySelector("#projectGitopsRepoInput");
-const projectGitopsPathInput = document.querySelector("#projectGitopsPathInput");
-const projectGitopsImageInput = document.querySelector("#projectGitopsImageInput");
-const projectGitopsRefInput = document.querySelector("#projectGitopsRefInput");
-const projectArgocdApplicationInput = document.querySelector("#projectArgocdApplicationInput");
-const projectRolloutNamespaceInput = document.querySelector("#projectRolloutNamespaceInput");
-const projectRolloutNameInput = document.querySelector("#projectRolloutNameInput");
 
 document.querySelector("#refreshButton").addEventListener("click", () => refreshStatus());
 document.querySelector("#clusterRefreshButton").addEventListener("click", () => refreshCluster());
+document.querySelector("#projectRefreshButton").addEventListener("click", () => refreshProjectsRegistry());
 document.querySelector("#releaseButton").addEventListener("click", () => runAction("release"));
 document.querySelector("#promoteButton").addEventListener("click", () => runAction("promote"));
 document.querySelector("#cancelReleaseButton").addEventListener("click", () => runAction("release/cancel"));
@@ -64,10 +54,9 @@ workerRoleButton.addEventListener("click", () => selectJoinRole("worker"));
 masterRoleButton.addEventListener("click", () => selectJoinRole("master"));
 document.querySelector("#generateJoinButton").addEventListener("click", () => generateJoinScript());
 copyJoinButton.addEventListener("click", () => copyJoinScript());
-document.querySelector("#projectRefreshButton").addEventListener("click", () => refreshProjectsRegistry());
-document.querySelector("#projectNewButton").addEventListener("click", () => beginCreateProject());
-projectDeleteButton.addEventListener("click", () => deleteProject());
-projectForm.addEventListener("submit", (event) => saveProject(event));
+projectSyncButton.addEventListener("click", () => syncSelectedProject());
+projectDeleteButton.addEventListener("click", () => deleteSelectedProject());
+
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "hidden") {
     cancelAutoRefresh();
@@ -195,25 +184,26 @@ async function refreshProjectsRegistry({ silent = false, preserveSelection = tru
     if (!silent) {
       projectNotice.textContent = "正在刷新项目";
     }
-    const data = await api("/api/projects");
-    projects = data.projects || [];
-    apps = projects.map(projectToApp);
+    const [effectiveData, sourceData] = await Promise.all([
+      api("/api/projects"),
+      api("/api/projects/source")
+    ]);
 
-    if (!preserveSelection || !projects.some((project) => project.id === activeProjectId)) {
-      activeProjectId = projects[0]?.id || null;
+    effectiveProjects = effectiveData.projects || [];
+    sourceProjects = sourceData.projects || [];
+    apps = effectiveProjects.map(projectToApp);
+
+    if (!preserveSelection || !sourceProjects.some((project) => project.id === activeProjectId)) {
+      activeProjectId = sourceProjects[0]?.id || null;
     }
     if (!apps.some((app) => app.id === activeAppId)) {
       activeAppId = apps[0]?.id || null;
     }
 
     renderAppList();
-    renderProjectList();
-
-    if (projectMode === "create" && activeProjectId === null) {
-      renderProjectForm(null);
-    } else {
-      renderProjectForm(projects.find((project) => project.id === activeProjectId) || null);
-    }
+    renderEffectiveProjectList();
+    renderSourceProjectList();
+    renderProjectDetails();
 
     if (!silent) {
       projectNotice.textContent = "项目已刷新";
@@ -223,165 +213,120 @@ async function refreshProjectsRegistry({ silent = false, preserveSelection = tru
   }
 }
 
-function renderProjectList() {
-  projectCount.textContent = String(projects.length);
-  projectList.innerHTML = projects.length
-    ? projects
+function renderEffectiveProjectList() {
+  projectCount.textContent = String(effectiveProjects.length);
+  projectList.innerHTML = effectiveProjects.length
+    ? effectiveProjects
         .map(
-          (project) => `<button class="project-row" type="button" data-project-id="${escapeHtml(project.id)}" aria-current="${project.id === activeProjectId ? "true" : "false"}">
+          (project) => `<button class="project-row" type="button" data-effective-project-id="${escapeHtml(project.id)}" aria-current="${project.id === activeProjectId ? "true" : "false"}">
     <strong>${escapeHtml(project.name)}</strong>
-    <small>${escapeHtml(project.id)} / ${escapeHtml(project.argocd.application)} / ${escapeHtml(project.gitops.path)}</small>
+    <small>已生效 / ${escapeHtml(project.id)} / ${escapeHtml(project.argocd.application)}</small>
   </button>`
         )
         .join("")
     : `<p class="empty-state">当前没有生效中的项目。</p>`;
 
-  for (const button of projectList.querySelectorAll("[data-project-id]")) {
+  for (const button of projectList.querySelectorAll("[data-effective-project-id]")) {
     button.addEventListener("click", () => {
-      const id = button.getAttribute("data-project-id");
-      activeProjectId = id;
-      projectMode = "edit";
-      renderProjectList();
-      renderProjectForm(projects.find((project) => project.id === id) || null);
+      activeProjectId = button.getAttribute("data-effective-project-id");
+      renderEffectiveProjectList();
+      renderSourceProjectList();
+      renderProjectDetails();
     });
   }
 }
 
-function beginCreateProject() {
-  activeProjectId = null;
-  projectMode = "create";
-  renderProjectList();
-  renderProjectForm(null);
-  projectNotice.textContent = "填写表单后生效保存。";
+function renderSourceProjectList() {
+  const effectiveIds = new Set(effectiveProjects.map((project) => project.id));
+  sourceProjectCount.textContent = String(sourceProjects.length);
+  sourceProjectList.innerHTML = sourceProjects.length
+    ? sourceProjects
+        .map((project) => {
+          const isEffective = effectiveIds.has(project.id);
+          return `<button class="project-row" type="button" data-source-project-id="${escapeHtml(project.id)}" aria-current="${project.id === activeProjectId ? "true" : "false"}">
+    <strong>${escapeHtml(project.name)}</strong>
+    <small>${isEffective ? "Git 已定义 / 系统已生效" : "Git 已定义 / 尚未生效"}</small>
+  </button>`;
+        })
+        .join("")
+    : `<p class="empty-state">Git 中暂无项目定义。</p>`;
+
+  for (const button of sourceProjectList.querySelectorAll("[data-source-project-id]")) {
+    button.addEventListener("click", () => {
+      activeProjectId = button.getAttribute("data-source-project-id");
+      renderEffectiveProjectList();
+      renderSourceProjectList();
+      renderProjectDetails();
+    });
+  }
 }
 
-function renderProjectForm(project) {
+function renderProjectDetails() {
+  const sourceProject = sourceProjects.find((project) => project.id === activeProjectId) || null;
+  const effectiveProject = effectiveProjects.find((project) => project.id === activeProjectId) || null;
+  const project = sourceProject || effectiveProject;
+
   if (!project) {
-    projectFormTitle.textContent = "新建项目";
+    selectedProjectTitle.textContent = "当前选择";
+    projectDetails.innerHTML = `<dt>状态</dt><dd>未选择项目</dd>`;
+    projectSyncButton.disabled = true;
     projectDeleteButton.disabled = true;
-    projectIdInput.disabled = false;
-    projectArgocdApplicationInput.disabled = false;
-    projectIdInput.value = "";
-    projectNameInput.value = "";
-    projectGithubOwnerInput.value = "";
-    projectGithubRepoInput.value = "";
-    projectGithubWorkflowInput.value = "build-and-publish.yaml";
-    projectGithubRefInput.value = "main";
-    projectGitopsOwnerInput.value = "";
-    projectGitopsRepoInput.value = "kadm-app-configs";
-    projectGitopsPathInput.value = "";
-    projectGitopsImageInput.value = "";
-    projectGitopsRefInput.value = "main";
-    projectArgocdApplicationInput.value = "";
-    projectRolloutNamespaceInput.value = "apps";
-    projectRolloutNameInput.value = "";
     return;
   }
 
-  projectFormTitle.textContent = `编辑项目 / ${project.id}`;
-  projectDeleteButton.disabled = false;
-  projectIdInput.disabled = true;
-  projectArgocdApplicationInput.disabled = true;
-  projectIdInput.value = project.id;
-  projectNameInput.value = project.name;
-  projectGithubOwnerInput.value = project.github.owner;
-  projectGithubRepoInput.value = project.github.repo;
-  projectGithubWorkflowInput.value = project.github.workflow;
-  projectGithubRefInput.value = project.github.ref;
-  projectGitopsOwnerInput.value = project.gitops.owner;
-  projectGitopsRepoInput.value = project.gitops.repo;
-  projectGitopsPathInput.value = project.gitops.path;
-  projectGitopsImageInput.value = project.gitops.image;
-  projectGitopsRefInput.value = project.gitops.ref;
-  projectArgocdApplicationInput.value = project.argocd.application;
-  projectRolloutNamespaceInput.value = project.rollout.namespace;
-  projectRolloutNameInput.value = project.rollout.name;
+  selectedProjectTitle.textContent = `${project.name} / ${project.id}`;
+  projectDetails.innerHTML = detailRows({
+    生效状态: effectiveProject ? "已在系统生效" : "仅在 Git 定义",
+    源码仓库: `${project.github.owner}/${project.github.repo}`,
+    Workflow: project.github.workflow,
+    源码分支: project.github.ref,
+    GitOps_仓库: `${project.gitops.owner}/${project.gitops.repo}`,
+    GitOps_路径: project.gitops.path,
+    镜像: project.gitops.image,
+    GitOps_分支: project.gitops.ref,
+    Argo_Application: project.argocd.application,
+    Rollout: `${project.rollout.namespace}/${project.rollout.name}`
+  });
+
+  projectSyncButton.disabled = !sourceProject;
+  projectDeleteButton.disabled = !effectiveProject;
 }
 
-async function saveProject(event) {
-  event.preventDefault();
-  const payload = collectProjectForm();
-
-  try {
-    projectNotice.textContent = projectMode === "create" ? "正在新增项目" : "正在更新项目";
-    const path = projectMode === "create" ? "/api/projects" : `/api/projects/${encodeURIComponent(activeProjectId)}`;
-    const method = projectMode === "create" ? "POST" : "PATCH";
-    const data = await api(path, {
-      method,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
-    });
-
-    activeProjectId = data.project.id;
-    projectMode = "edit";
-    await refreshProjectsRegistry({ silent: true, preserveSelection: true });
-    renderProjectList();
-    renderProjectForm(projects.find((project) => project.id === activeProjectId) || null);
-    projectNotice.textContent = "项目生效完成";
-  } catch (error) {
-    projectNotice.textContent = `项目生效失败：${error.message}`;
-  }
-}
-
-async function deleteProject() {
+async function syncSelectedProject() {
   if (!activeProjectId) {
     return;
   }
-  const confirmed = window.confirm(`确认下线并删除项目 ${activeProjectId} 吗？`);
+  try {
+    projectNotice.textContent = `正在从 Git 导入/同步 ${activeProjectId}`;
+    await api(`/api/projects/${encodeURIComponent(activeProjectId)}/sync`, {
+      method: "POST"
+    });
+    await refreshProjectsRegistry({ silent: true, preserveSelection: true });
+    projectNotice.textContent = `项目 ${activeProjectId} 已生效`;
+  } catch (error) {
+    projectNotice.textContent = `导入/同步失败：${error.message}`;
+  }
+}
+
+async function deleteSelectedProject() {
+  if (!activeProjectId) {
+    return;
+  }
+  const confirmed = window.confirm(`确认仅从系统下线 ${activeProjectId} 吗？Git 中定义不会被修改。`);
   if (!confirmed) {
     return;
   }
 
   try {
-    projectNotice.textContent = `正在删除项目 ${activeProjectId}`;
+    projectNotice.textContent = `正在从系统下线 ${activeProjectId}`;
     await api(`/api/projects/${encodeURIComponent(activeProjectId)}`, {
       method: "DELETE"
     });
-    activeProjectId = null;
-    projectMode = "create";
-    await refreshProjectsRegistry({ silent: true, preserveSelection: false });
-    renderProjectForm(null);
-    projectNotice.textContent = "项目已从生效层删除";
+    await refreshProjectsRegistry({ silent: true, preserveSelection: true });
+    projectNotice.textContent = `项目 ${activeProjectId} 已从系统下线`;
   } catch (error) {
-    projectNotice.textContent = `删除失败：${error.message}`;
+    projectNotice.textContent = `下线失败：${error.message}`;
   }
-}
-
-function collectProjectForm() {
-  return {
-    id: projectIdInput.value.trim(),
-    name: projectNameInput.value.trim(),
-    github: {
-      owner: projectGithubOwnerInput.value.trim(),
-      repo: projectGithubRepoInput.value.trim(),
-      workflow: projectGithubWorkflowInput.value.trim(),
-      ref: projectGithubRefInput.value.trim()
-    },
-    gitops: {
-      owner: projectGitopsOwnerInput.value.trim(),
-      repo: projectGitopsRepoInput.value.trim(),
-      path: projectGitopsPathInput.value.trim(),
-      image: projectGitopsImageInput.value.trim(),
-      ref: projectGitopsRefInput.value.trim()
-    },
-    argocd: {
-      application: projectArgocdApplicationInput.value.trim()
-    },
-    rollout: {
-      namespace: projectRolloutNamespaceInput.value.trim(),
-      name: projectRolloutNameInput.value.trim()
-    }
-  };
-}
-
-function projectToApp(project) {
-  return {
-    id: project.id,
-    name: project.name,
-    github: project.github,
-    argocd: project.argocd,
-    rollout: project.rollout
-  };
 }
 
 async function runAction(action) {
@@ -655,6 +600,16 @@ async function api(path, options) {
     throw new Error(data?.error || response.statusText);
   }
   return data;
+}
+
+function projectToApp(project) {
+  return {
+    id: project.id,
+    name: project.name,
+    github: project.github,
+    argocd: project.argocd,
+    rollout: project.rollout
+  };
 }
 
 function escapeHtml(value) {

@@ -30,6 +30,17 @@ export function createStaticAppRegistry(apps = []) {
   };
 }
 
+export function createStaticSourceProjectRegistry(apps = []) {
+  return {
+    async listApps() {
+      return apps;
+    },
+    async getApp(id) {
+      return findProject(apps, id);
+    }
+  };
+}
+
 export function publicProject(app) {
   return {
     id: app.id,
@@ -105,6 +116,15 @@ export class EffectiveProjectRegistryService {
     return created;
   }
 
+  async syncApp(sourceApp) {
+    const current = await this.loadEffectiveApps();
+    const exists = current.some((app) => app.id === sourceApp.id);
+    if (exists) {
+      return this.updateApp(sourceApp.id, sourceApp);
+    }
+    return this.createApp(sourceApp);
+  }
+
   async updateApp(id, patch) {
     const current = await this.loadEffectiveApps();
     const existing = findProject(current, id);
@@ -138,6 +158,28 @@ export class EffectiveProjectRegistryService {
       }
       throw error;
     }
+  }
+}
+
+export class GitSourceProjectRegistry {
+  constructor({ github, fallbackApps = [] }) {
+    this.github = github;
+    this.fallbackApps = fallbackApps;
+  }
+
+  async listApps() {
+    const apps = await this.loadSourceApps();
+    return apps;
+  }
+
+  async getApp(id) {
+    return findProject(await this.loadSourceApps(), id);
+  }
+
+  async loadSourceApps() {
+    const location = inferSourceRegistryLocation(this.fallbackApps);
+    const file = await this.github.getGitOpsRegistryFile(location);
+    return normalizeAppsConfig(JSON.parse(file));
   }
 }
 
@@ -455,4 +497,19 @@ function unsupportedRegistryMutation() {
   const error = new Error("Project registry mutations are not configured.");
   error.status = 503;
   return error;
+}
+
+function inferSourceRegistryLocation(apps) {
+  const app = apps[0];
+  if (!app?.gitops?.owner || !app?.gitops?.repo) {
+    const error = new Error("Source project registry location is not configured.");
+    error.status = 503;
+    throw error;
+  }
+  return {
+    owner: app.gitops.owner,
+    repo: app.gitops.repo,
+    ref: app.gitops.ref || "main",
+    path: "apps/apps.json"
+  };
 }

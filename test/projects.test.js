@@ -3,7 +3,8 @@ import test from "node:test";
 
 import {
   buildRegistryApplication,
-  EffectiveProjectRegistryService
+  EffectiveProjectRegistryService,
+  GitSourceProjectRegistry
 } from "../src/projects.js";
 
 const baseApp = {
@@ -132,4 +133,22 @@ test("EffectiveProjectRegistryService rejects renaming a project id or Argo Appl
     () => service.updateApp("demo-hello", { argocd: { application: "new-app" } }),
     /Argo CD application name cannot be changed/
   );
+});
+
+test("GitSourceProjectRegistry loads source projects from the Git-defined apps.json", async () => {
+  const source = new GitSourceProjectRegistry({
+    fallbackApps: [baseApp],
+    github: {
+      async getGitOpsRegistryFile({ owner, repo, path, ref }) {
+        assert.equal(owner, "ccq18");
+        assert.equal(repo, "kadm-app-configs");
+        assert.equal(path, "apps/apps.json");
+        assert.equal(ref, "main");
+        return JSON.stringify([baseApp]);
+      }
+    }
+  });
+
+  const apps = await source.listApps();
+  assert.equal(apps[0].id, "demo-hello");
 });
