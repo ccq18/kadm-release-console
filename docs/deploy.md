@@ -64,16 +64,16 @@ Do not add a public Ingress until KADM Release Console has authentication, HTTPS
 
 ## 4. App Applications
 
-Create the two app Applications from their repositories:
+Create the two app Applications from `kadm-app-configs`:
 
 ```bash
-kubectl apply -f ../demo-hello/docs/argocd-application.yaml
-kubectl apply -f ../demo-hello-spring/docs/argocd-application.yaml
+kubectl apply -f ../kadm-app-configs/apps/demo-hello/overlays/prod
+kubectl apply -f ../kadm-app-configs/apps/demo-hello-spring/overlays/prod
 ```
 
 The apps require:
 
-- Argo CD repository credentials for the three GitHub SSH repositories.
+- Argo CD repository credentials for `kadm-release-console` and `kadm-app-configs`.
 - `apps/ghcr-cred` image pull secret.
 - `apps/hello-db` and `apps/hellospring-db` database secrets.
 - Argo Rollouts installed in the cluster.

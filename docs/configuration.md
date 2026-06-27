@@ -20,7 +20,9 @@ In-cluster deployments use the mounted Kubernetes service account token automati
 
 ## Application Config
 
-See `config/apps.example.json`.
+Local development can use `config/apps.example.json`.
+
+Production deployments should mount the registry data from `kadm-app-configs/apps/apps.json` through the `kadm-apps-config` ConfigMap created by `kadmctl configure-delivery`.
 
 Each app needs:
 

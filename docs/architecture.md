@@ -20,10 +20,10 @@ K3s
 
 Argo CD reads these GitHub paths:
 
-- `git@github.com:ccq18/demo-hello.git`, path `k8s/overlays/prod`
-- `git@github.com:ccq18/demo-hello-spring.git`, path `k8s/overlays/prod`
+- `https://github.com/ccq18/kadm-app-configs.git`, path `apps/demo-hello/overlays/prod`
+- `https://github.com/ccq18/kadm-app-configs.git`, path `apps/demo-hello-spring/overlays/prod`
 
-The application repositories own their source, build workflow, image tag, and Kubernetes manifests. KADM Release Console orchestrates the release but does not write manifests directly.
+The application repositories own their source, Dockerfile, build workflow, and image outputs. `kadm-app-configs` owns Kubernetes delivery manifests. KADM Release Console orchestrates the release but does not write manifests directly.
 
 Publish tasks are runtime-only state held in the KADM Release Console process. This is intentional for the first version: losing a task on restart is acceptable because stable traffic changes only when an operator explicitly promotes a candidate. After restart, KADM Release Console derives the visible state from GitHub workflow runs, Argo CD application status, and Argo Rollouts status.
 

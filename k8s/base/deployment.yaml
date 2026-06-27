@@ -93,4 +93,4 @@ spec:
       volumes:
         - name: config
           configMap:
-            name: kadm-config
+            name: kadm-apps-config

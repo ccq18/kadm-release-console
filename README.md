@@ -13,6 +13,8 @@ It coordinates three systems:
 
 KADM Release Console is intentionally deployed as a ClusterIP-only internal service. Do not expose it with a public Ingress until authentication, HTTPS, and an access policy are in place.
 
+Application deployment manifests and the production app registry are owned by `kadm-app-configs`. This repository only contains the release console code and its own deployment manifests.
+
 ## Local Development
 
 ```bash
