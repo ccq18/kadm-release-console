@@ -1,0 +1,94 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: onecd
+  namespace: onecd
+  labels:
+    app.kubernetes.io/name: onecd
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: onecd
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: onecd
+    spec:
+      serviceAccountName: onecd
+      imagePullSecrets:
+        - name: ghcr-cred
+      containers:
+        - name: onecd
+          image: ghcr.io/ccq18/kadm-release-console:sha-initial
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: PORT
+              value: "8080"
+            - name: ONECD_APPS_CONFIG
+              value: /etc/onecd/apps.json
+            - name: NODE_EXTRA_CA_CERTS
+              value: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+            - name: GITHUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: onecd-secrets
+                  key: GITHUB_TOKEN
+            - name: ARGOCD_BASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: onecd-secrets
+                  key: ARGOCD_BASE_URL
+            - name: ARGOCD_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: onecd-secrets
+                  key: ARGOCD_TOKEN
+            - name: ONECD_CLUSTER_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: onecd-secrets
+                  key: ONECD_CLUSTER_NAME
+                  optional: true
+            - name: K3S_JOIN_SERVER_URL
+              valueFrom:
+                secretKeyRef:
+                  name: onecd-secrets
+                  key: K3S_JOIN_SERVER_URL
+                  optional: true
+            - name: K3S_JOIN_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: onecd-secrets
+                  key: K3S_JOIN_TOKEN
+                  optional: true
+          volumeMounts:
+            - name: config
+              mountPath: /etc/onecd
+              readOnly: true
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 50m
+              memory: 96Mi
+            limits:
+              cpu: 300m
+              memory: 256Mi
+      volumes:
+        - name: config
+          configMap:
+            name: onecd-config

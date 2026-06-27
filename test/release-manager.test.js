@@ -1,0 +1,202 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { ReleaseManager } from "../src/release-manager.js";
+
+const app = {
+  id: "demo-hello",
+  github: { ref: "main" }
+};
+
+test("runs publish through build, deploy, and canary check", async () => {
+  const events = [];
+  let runPolls = 0;
+  const manager = new ReleaseManager({
+    github: {
+      async dispatchWorkflow(targetApp, { imageTag }) {
+        events.push(`dispatch:${targetApp.id}:${imageTag}`);
+        return { dispatched: true };
+      },
+      async listWorkflowRuns() {
+        events.push("runs");
+        runPolls += 1;
+        if (runPolls === 1) {
+          return [];
+        }
+        return runPolls === 2
+          ? [{ id: 1, status: "queued", conclusion: null, created_at: "2026-06-26T00:00:01.000Z" }]
+          : [{ id: 1, status: "completed", conclusion: "success", created_at: "2026-06-26T00:00:01.000Z" }];
+      }
+    },
+    argocd: {
+      async syncApplication() {
+        events.push("sync");
+        return { operation: "started" };
+      },
+      async getApplication() {
+        events.push("app");
+        return { status: { sync: { status: "Synced" }, operationState: { phase: "Succeeded" } } };
+      }
+    },
+    rollouts: {
+      async getRollout() {
+        events.push("rollout");
+        return { status: { phase: "Paused", stableRS: "old-hash", currentPodHash: "new-hash" } };
+      }
+    },
+    now: () => new Date("2026-06-26T00:00:00.000Z"),
+    pollIntervalMs: 0
+  });
+
+  const started = manager.start(app, { imageTag: "sha-abc1234" });
+  assert.equal(started.status, "running");
+  assert.equal(started.stage, "building");
+
+  const completed = await manager.waitFor(app.id);
+  assert.equal(completed.status, "succeeded");
+  assert.equal(completed.stage, "ready");
+  assert.match(completed.message, /等待放量/);
+  assert.deepEqual(events, ["runs", "dispatch:demo-hello:sha-abc1234", "runs", "runs", "sync", "app", "rollout"]);
+});
+
+test("waits for the workflow run created by this publish", async () => {
+  let runPolls = 0;
+  const manager = new ReleaseManager({
+    github: {
+      async dispatchWorkflow() {
+        return { dispatched: true };
+      },
+      async listWorkflowRuns() {
+        runPolls += 1;
+        if (runPolls === 1) {
+          return [{ id: 1, status: "completed", conclusion: "success", created_at: "2026-06-26T00:00:00.000Z" }];
+        }
+        if (runPolls === 2) {
+          return [{ id: 1, status: "completed", conclusion: "success", created_at: "2026-06-26T00:00:00.000Z" }];
+        }
+        return [
+          { id: 2, status: "completed", conclusion: "success", created_at: "2026-06-26T00:00:02.000Z" },
+          { id: 1, status: "completed", conclusion: "success", created_at: "2026-06-26T00:00:00.000Z" }
+        ];
+      }
+    },
+    argocd: {
+      async syncApplication() {
+        return {};
+      },
+      async getApplication() {
+        return { status: { sync: { status: "Synced" }, operationState: { phase: "Succeeded" } } };
+      }
+    },
+    rollouts: {
+      async getRollout() {
+        return { status: { phase: "Paused", stableRS: "old-hash", currentPodHash: "new-hash" } };
+      }
+    },
+    now: () => new Date("2026-06-26T00:00:01.000Z"),
+    pollIntervalMs: 0
+  });
+
+  manager.start(app);
+  const completed = await manager.waitFor(app.id);
+
+  assert.equal(completed.status, "succeeded");
+  assert.equal(runPolls, 3);
+});
+
+test("rejects a second publish while one is already running for the same app", async () => {
+  let runPolls = 0;
+  const manager = new ReleaseManager({
+    github: {
+      async dispatchWorkflow() {
+        return { dispatched: true };
+      },
+      async listWorkflowRuns() {
+        runPolls += 1;
+        return runPolls === 1
+          ? []
+          : [{ id: 1, status: "completed", conclusion: "success", created_at: "2026-06-26T00:00:01.000Z" }];
+      }
+    },
+    argocd: {
+      async syncApplication() {
+        return {};
+      },
+      async getApplication() {
+        return { status: { sync: { status: "Synced" }, operationState: { phase: "Running" } } };
+      }
+    },
+    rollouts: {
+      async getRollout() {
+        return { status: { phase: "Progressing" } };
+      }
+    },
+    now: () => new Date("2026-06-26T00:00:00.000Z"),
+    pollIntervalMs: 10,
+    deployTimeoutMs: 20
+  });
+
+  manager.start(app);
+  assert.throws(() => manager.start(app), /already running/);
+
+  const completed = await manager.waitFor(app.id);
+  assert.equal(completed.status, "failed");
+  assert.match(completed.error, /Timed out/);
+});
+
+test("marks publish failed when the build workflow fails", async () => {
+  let runPolls = 0;
+  const manager = new ReleaseManager({
+    github: {
+      async dispatchWorkflow() {
+        return { dispatched: true };
+      },
+      async listWorkflowRuns() {
+        runPolls += 1;
+        if (runPolls === 1) {
+          return [];
+        }
+        return [{ id: 9, status: "completed", conclusion: "failure", created_at: "2026-06-26T00:00:01.000Z" }];
+      }
+    },
+    argocd: {
+      async syncApplication() {
+        throw new Error("sync should not run after a failed build");
+      }
+    },
+    rollouts: {},
+    now: () => new Date("2026-06-26T00:00:00.000Z"),
+    pollIntervalMs: 0
+  });
+
+  manager.start(app);
+  const completed = await manager.waitFor(app.id);
+
+  assert.equal(completed.status, "failed");
+  assert.equal(completed.stage, "failed");
+  assert.match(completed.error, /Build workflow failed/);
+});
+
+test("cancels an in-memory publish task", async () => {
+  const manager = new ReleaseManager({
+    github: {
+      async dispatchWorkflow() {
+        return { dispatched: true };
+      },
+      async listWorkflowRuns() {
+        return [{ id: 1, status: "queued", conclusion: null, created_at: "2026-06-26T00:00:01.000Z" }];
+      }
+    },
+    argocd: {},
+    rollouts: {},
+    now: () => new Date("2026-06-26T00:00:00.000Z"),
+    pollIntervalMs: 10
+  });
+
+  manager.start(app);
+  const cancelled = manager.cancel(app.id);
+  const completed = await manager.waitFor(app.id);
+
+  assert.equal(cancelled.status, "cancelled");
+  assert.equal(completed.status, "cancelled");
+  assert.equal(completed.stage, "cancelled");
+});

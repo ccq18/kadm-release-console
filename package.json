@@ -1,0 +1,19 @@
+{
+  "name": "kadm-release-console",
+  "version": "0.1.0",
+  "description": "KADM release console for GitHub Actions, Argo CD, and Argo Rollouts managed apps.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "test": "node --test",
+    "lint": "node --check src/*.js src/**/*.js public/*.js test/*.test.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

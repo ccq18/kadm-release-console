@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>KADM Release Console</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='8' fill='%23263238'/%3E%3Ctext x='32' y='39' text-anchor='middle' font-size='20' font-family='monospace' fill='white'%3EKA%3C/text%3E%3C/svg%3E">
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <main class="shell">
+      <aside class="sidebar" aria-label="Applications">
+        <div class="brand">
+          <span class="brand-mark">KA</span>
+          <div>
+            <h1>KADM</h1>
+            <p>发布控制台</p>
+          </div>
+        </div>
+        <button id="clusterNavButton" class="cluster-button" type="button" aria-current="false">
+          <span>集群节点</span>
+          <small>Master / Worker</small>
+        </button>
+        <nav id="appList" class="app-list" aria-label="Application list"></nav>
+      </aside>
+
+      <section id="releaseWorkspace" class="workspace">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">apps / prod</p>
+            <h2 id="appTitle">加载中</h2>
+          </div>
+          <button id="refreshButton" class="icon-button" type="button" aria-label="刷新状态" title="刷新状态">↻</button>
+        </header>
+
+        <section class="release-strip" aria-label="Release actions">
+          <label class="tag-field">
+            <span>镜像标签</span>
+            <input id="imageTagInput" type="text" placeholder="留空则自动生成 sha-xxxxxxx">
+          </label>
+          <label class="version-field">
+            <span>放量版本</span>
+            <select id="versionSelect"></select>
+          </label>
+          <button id="releaseButton" class="primary-action" type="button">发布</button>
+          <button id="promoteButton" class="secondary-action" type="button">放量</button>
+          <button id="cancelReleaseButton" class="secondary-action subtle-action" type="button">取消发布</button>
+          <button id="abortButton" class="danger-action" type="button">终止</button>
+        </section>
+
+        <section class="stage-panel" aria-label="Release stage">
+          <div class="stage-copy">
+            <p class="eyebrow">发布顺序：构建 -> 部署 -> 检查 -> 放量</p>
+            <h3 id="stageLabel">状态待确认</h3>
+            <p id="stageDescription" class="stage-description">正在读取发布状态。</p>
+            <p id="stageNextStep" class="stage-next-step">刷新后会显示下一步操作。</p>
+          </div>
+          <ol id="stageSteps" class="stage-steps"></ol>
+        </section>
+
+        <section class="metrics-grid" aria-label="Release state">
+          <article class="metric">
+            <span>部署状态</span>
+            <strong id="syncState">未知</strong>
+            <small id="healthState">健康状态未知</small>
+          </article>
+          <article class="metric">
+            <span>发布状态</span>
+            <strong id="rolloutPhase">未知</strong>
+            <small id="rolloutRevision">版本未知</small>
+          </article>
+          <article class="metric">
+            <span>构建状态</span>
+            <strong id="workflowStatus">未知</strong>
+            <small id="workflowBranch">分支未知</small>
+          </article>
+          <article class="metric">
+            <span>版本</span>
+            <strong id="candidateVersion">无候选版本</strong>
+            <small id="stableVersion">稳定版本未知</small>
+          </article>
+        </section>
+
+        <section class="details-grid" aria-label="Details">
+          <article class="panel">
+            <h3>应用配置</h3>
+            <dl id="appDetails"></dl>
+          </article>
+          <details class="panel">
+            <summary>最近构建详情</summary>
+            <pre id="workflowDetails">暂无数据</pre>
+          </details>
+          <details class="panel">
+            <summary>版本详情</summary>
+            <pre id="versionDetails">暂无数据</pre>
+          </details>
+          <details class="panel wide">
+            <summary>发布详情</summary>
+            <pre id="rolloutDetails">暂无数据</pre>
+          </details>
+        </section>
+
+        <p id="notice" class="notice" role="status"></p>
+      </section>
+
+      <section id="clusterWorkspace" class="workspace" hidden>
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">cluster / nodes</p>
+            <h2 id="clusterTitle">集群节点</h2>
+          </div>
+          <button id="clusterRefreshButton" class="icon-button" type="button" aria-label="刷新集群" title="刷新集群">↻</button>
+        </header>
+
+        <section class="cluster-summary" aria-label="Cluster summary">
+          <article class="metric">
+            <span>控制面</span>
+            <strong id="masterCount">0</strong>
+            <small id="clusterPhase">状态未知</small>
+          </article>
+          <article class="metric">
+            <span>计算节点</span>
+            <strong id="workerCount">0</strong>
+            <small id="readyCount">Ready 未知</small>
+          </article>
+          <article class="metric wide-metric">
+            <span>拓扑建议</span>
+            <strong id="clusterGuidanceTitle">等待检查</strong>
+            <small id="clusterGuidance">正在读取集群节点。</small>
+          </article>
+        </section>
+
+        <section class="node-layout" aria-label="Node operations">
+          <article class="panel node-panel">
+            <div class="panel-heading">
+              <h3>节点</h3>
+              <span id="nodeCount" class="panel-badge">0</span>
+            </div>
+            <div id="nodeList" class="node-list"></div>
+          </article>
+
+          <article class="panel join-panel">
+            <h3>加入节点</h3>
+            <div class="role-control" role="group" aria-label="Node role">
+              <button id="workerRoleButton" class="role-button" type="button" aria-pressed="true">Worker</button>
+              <button id="masterRoleButton" class="role-button" type="button" aria-pressed="false">Master</button>
+            </div>
+            <button id="generateJoinButton" class="primary-action full-action" type="button">生成脚本</button>
+            <button id="copyJoinButton" class="secondary-action full-action" type="button" disabled>复制脚本</button>
+            <p id="joinWarning" class="join-warning"></p>
+            <pre id="joinScript" class="join-script">选择角色后生成加入脚本。</pre>
+          </article>
+        </section>
+
+        <p id="clusterNotice" class="notice" role="status"></p>
+      </section>
+    </main>
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>
