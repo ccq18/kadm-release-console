@@ -7,25 +7,50 @@ import {
 } from "./release-state.js";
 
 let apps = [];
+let projects = [];
 let activeAppId = null;
+let activeProjectId = null;
 let activeView = "release";
 let joinRole = "worker";
 let refreshTimer = null;
 let isRefreshing = false;
+let projectMode = "create";
 
 const appList = document.querySelector("#appList");
 const appTitle = document.querySelector("#appTitle");
 const notice = document.querySelector("#notice");
 const clusterNotice = document.querySelector("#clusterNotice");
+const projectNotice = document.querySelector("#projectNotice");
 const imageTagInput = document.querySelector("#imageTagInput");
 const versionSelect = document.querySelector("#versionSelect");
 const releaseWorkspace = document.querySelector("#releaseWorkspace");
 const clusterWorkspace = document.querySelector("#clusterWorkspace");
+const projectWorkspace = document.querySelector("#projectWorkspace");
 const clusterNavButton = document.querySelector("#clusterNavButton");
+const projectNavButton = document.querySelector("#projectNavButton");
 const workerRoleButton = document.querySelector("#workerRoleButton");
 const masterRoleButton = document.querySelector("#masterRoleButton");
 const joinScript = document.querySelector("#joinScript");
 const copyJoinButton = document.querySelector("#copyJoinButton");
+const projectList = document.querySelector("#projectList");
+const projectCount = document.querySelector("#projectCount");
+const projectForm = document.querySelector("#projectForm");
+const projectFormTitle = document.querySelector("#projectFormTitle");
+const projectDeleteButton = document.querySelector("#projectDeleteButton");
+const projectIdInput = document.querySelector("#projectIdInput");
+const projectNameInput = document.querySelector("#projectNameInput");
+const projectGithubOwnerInput = document.querySelector("#projectGithubOwnerInput");
+const projectGithubRepoInput = document.querySelector("#projectGithubRepoInput");
+const projectGithubWorkflowInput = document.querySelector("#projectGithubWorkflowInput");
+const projectGithubRefInput = document.querySelector("#projectGithubRefInput");
+const projectGitopsOwnerInput = document.querySelector("#projectGitopsOwnerInput");
+const projectGitopsRepoInput = document.querySelector("#projectGitopsRepoInput");
+const projectGitopsPathInput = document.querySelector("#projectGitopsPathInput");
+const projectGitopsImageInput = document.querySelector("#projectGitopsImageInput");
+const projectGitopsRefInput = document.querySelector("#projectGitopsRefInput");
+const projectArgocdApplicationInput = document.querySelector("#projectArgocdApplicationInput");
+const projectRolloutNamespaceInput = document.querySelector("#projectRolloutNamespaceInput");
+const projectRolloutNameInput = document.querySelector("#projectRolloutNameInput");
 
 document.querySelector("#refreshButton").addEventListener("click", () => refreshStatus());
 document.querySelector("#clusterRefreshButton").addEventListener("click", () => refreshCluster());
@@ -34,10 +59,15 @@ document.querySelector("#promoteButton").addEventListener("click", () => runActi
 document.querySelector("#cancelReleaseButton").addEventListener("click", () => runAction("release/cancel"));
 document.querySelector("#abortButton").addEventListener("click", () => runAction("rollout/abort"));
 clusterNavButton.addEventListener("click", () => showClusterView());
+projectNavButton.addEventListener("click", () => showProjectView());
 workerRoleButton.addEventListener("click", () => selectJoinRole("worker"));
 masterRoleButton.addEventListener("click", () => selectJoinRole("master"));
 document.querySelector("#generateJoinButton").addEventListener("click", () => generateJoinScript());
 copyJoinButton.addEventListener("click", () => copyJoinScript());
+document.querySelector("#projectRefreshButton").addEventListener("click", () => refreshProjectsRegistry());
+document.querySelector("#projectNewButton").addEventListener("click", () => beginCreateProject());
+projectDeleteButton.addEventListener("click", () => deleteProject());
+projectForm.addEventListener("submit", (event) => saveProject(event));
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "hidden") {
     cancelAutoRefresh();
@@ -47,6 +77,10 @@ document.addEventListener("visibilitychange", () => {
     refreshStatus({ silent: true });
     return;
   }
+  if (activeView === "projects") {
+    refreshProjectsRegistry({ silent: true });
+    return;
+  }
   refreshCluster({ silent: true });
 });
 
@@ -54,8 +88,7 @@ await init();
 
 async function init() {
   try {
-    const data = await api("/api/apps");
-    apps = data.apps;
+    await refreshProjectsRegistry({ silent: true, preserveSelection: false });
     activeAppId = apps[0]?.id || null;
     renderAppList();
     await refreshStatus();
@@ -86,7 +119,9 @@ function showReleaseView() {
   activeView = "release";
   releaseWorkspace.hidden = false;
   clusterWorkspace.hidden = true;
+  projectWorkspace.hidden = true;
   clusterNavButton.setAttribute("aria-current", "false");
+  projectNavButton.setAttribute("aria-current", "false");
   renderAppList();
 }
 
@@ -95,9 +130,23 @@ async function showClusterView() {
   cancelAutoRefresh();
   releaseWorkspace.hidden = true;
   clusterWorkspace.hidden = false;
+  projectWorkspace.hidden = true;
   clusterNavButton.setAttribute("aria-current", "true");
+  projectNavButton.setAttribute("aria-current", "false");
   renderAppList();
   await refreshCluster();
+}
+
+async function showProjectView() {
+  activeView = "projects";
+  cancelAutoRefresh();
+  releaseWorkspace.hidden = true;
+  clusterWorkspace.hidden = true;
+  projectWorkspace.hidden = false;
+  clusterNavButton.setAttribute("aria-current", "false");
+  projectNavButton.setAttribute("aria-current", "true");
+  renderAppList();
+  await refreshProjectsRegistry();
 }
 
 async function refreshStatus({ silent = false } = {}) {
@@ -139,6 +188,200 @@ async function refreshCluster({ silent = false } = {}) {
   } catch (error) {
     clusterNotice.textContent = `集群刷新失败：${error.message}`;
   }
+}
+
+async function refreshProjectsRegistry({ silent = false, preserveSelection = true } = {}) {
+  try {
+    if (!silent) {
+      projectNotice.textContent = "正在刷新项目";
+    }
+    const data = await api("/api/projects");
+    projects = data.projects || [];
+    apps = projects.map(projectToApp);
+
+    if (!preserveSelection || !projects.some((project) => project.id === activeProjectId)) {
+      activeProjectId = projects[0]?.id || null;
+    }
+    if (!apps.some((app) => app.id === activeAppId)) {
+      activeAppId = apps[0]?.id || null;
+    }
+
+    renderAppList();
+    renderProjectList();
+
+    if (projectMode === "create" && activeProjectId === null) {
+      renderProjectForm(null);
+    } else {
+      renderProjectForm(projects.find((project) => project.id === activeProjectId) || null);
+    }
+
+    if (!silent) {
+      projectNotice.textContent = "项目已刷新";
+    }
+  } catch (error) {
+    projectNotice.textContent = `项目刷新失败：${error.message}`;
+  }
+}
+
+function renderProjectList() {
+  projectCount.textContent = String(projects.length);
+  projectList.innerHTML = projects.length
+    ? projects
+        .map(
+          (project) => `<button class="project-row" type="button" data-project-id="${escapeHtml(project.id)}" aria-current="${project.id === activeProjectId ? "true" : "false"}">
+    <strong>${escapeHtml(project.name)}</strong>
+    <small>${escapeHtml(project.id)} / ${escapeHtml(project.argocd.application)} / ${escapeHtml(project.gitops.path)}</small>
+  </button>`
+        )
+        .join("")
+    : `<p class="empty-state">当前没有生效中的项目。</p>`;
+
+  for (const button of projectList.querySelectorAll("[data-project-id]")) {
+    button.addEventListener("click", () => {
+      const id = button.getAttribute("data-project-id");
+      activeProjectId = id;
+      projectMode = "edit";
+      renderProjectList();
+      renderProjectForm(projects.find((project) => project.id === id) || null);
+    });
+  }
+}
+
+function beginCreateProject() {
+  activeProjectId = null;
+  projectMode = "create";
+  renderProjectList();
+  renderProjectForm(null);
+  projectNotice.textContent = "填写表单后生效保存。";
+}
+
+function renderProjectForm(project) {
+  if (!project) {
+    projectFormTitle.textContent = "新建项目";
+    projectDeleteButton.disabled = true;
+    projectIdInput.disabled = false;
+    projectArgocdApplicationInput.disabled = false;
+    projectIdInput.value = "";
+    projectNameInput.value = "";
+    projectGithubOwnerInput.value = "";
+    projectGithubRepoInput.value = "";
+    projectGithubWorkflowInput.value = "build-and-publish.yaml";
+    projectGithubRefInput.value = "main";
+    projectGitopsOwnerInput.value = "";
+    projectGitopsRepoInput.value = "kadm-app-configs";
+    projectGitopsPathInput.value = "";
+    projectGitopsImageInput.value = "";
+    projectGitopsRefInput.value = "main";
+    projectArgocdApplicationInput.value = "";
+    projectRolloutNamespaceInput.value = "apps";
+    projectRolloutNameInput.value = "";
+    return;
+  }
+
+  projectFormTitle.textContent = `编辑项目 / ${project.id}`;
+  projectDeleteButton.disabled = false;
+  projectIdInput.disabled = true;
+  projectArgocdApplicationInput.disabled = true;
+  projectIdInput.value = project.id;
+  projectNameInput.value = project.name;
+  projectGithubOwnerInput.value = project.github.owner;
+  projectGithubRepoInput.value = project.github.repo;
+  projectGithubWorkflowInput.value = project.github.workflow;
+  projectGithubRefInput.value = project.github.ref;
+  projectGitopsOwnerInput.value = project.gitops.owner;
+  projectGitopsRepoInput.value = project.gitops.repo;
+  projectGitopsPathInput.value = project.gitops.path;
+  projectGitopsImageInput.value = project.gitops.image;
+  projectGitopsRefInput.value = project.gitops.ref;
+  projectArgocdApplicationInput.value = project.argocd.application;
+  projectRolloutNamespaceInput.value = project.rollout.namespace;
+  projectRolloutNameInput.value = project.rollout.name;
+}
+
+async function saveProject(event) {
+  event.preventDefault();
+  const payload = collectProjectForm();
+
+  try {
+    projectNotice.textContent = projectMode === "create" ? "正在新增项目" : "正在更新项目";
+    const path = projectMode === "create" ? "/api/projects" : `/api/projects/${encodeURIComponent(activeProjectId)}`;
+    const method = projectMode === "create" ? "POST" : "PATCH";
+    const data = await api(path, {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+
+    activeProjectId = data.project.id;
+    projectMode = "edit";
+    await refreshProjectsRegistry({ silent: true, preserveSelection: true });
+    renderProjectList();
+    renderProjectForm(projects.find((project) => project.id === activeProjectId) || null);
+    projectNotice.textContent = "项目生效完成";
+  } catch (error) {
+    projectNotice.textContent = `项目生效失败：${error.message}`;
+  }
+}
+
+async function deleteProject() {
+  if (!activeProjectId) {
+    return;
+  }
+  const confirmed = window.confirm(`确认下线并删除项目 ${activeProjectId} 吗？`);
+  if (!confirmed) {
+    return;
+  }
+
+  try {
+    projectNotice.textContent = `正在删除项目 ${activeProjectId}`;
+    await api(`/api/projects/${encodeURIComponent(activeProjectId)}`, {
+      method: "DELETE"
+    });
+    activeProjectId = null;
+    projectMode = "create";
+    await refreshProjectsRegistry({ silent: true, preserveSelection: false });
+    renderProjectForm(null);
+    projectNotice.textContent = "项目已从生效层删除";
+  } catch (error) {
+    projectNotice.textContent = `删除失败：${error.message}`;
+  }
+}
+
+function collectProjectForm() {
+  return {
+    id: projectIdInput.value.trim(),
+    name: projectNameInput.value.trim(),
+    github: {
+      owner: projectGithubOwnerInput.value.trim(),
+      repo: projectGithubRepoInput.value.trim(),
+      workflow: projectGithubWorkflowInput.value.trim(),
+      ref: projectGithubRefInput.value.trim()
+    },
+    gitops: {
+      owner: projectGitopsOwnerInput.value.trim(),
+      repo: projectGitopsRepoInput.value.trim(),
+      path: projectGitopsPathInput.value.trim(),
+      image: projectGitopsImageInput.value.trim(),
+      ref: projectGitopsRefInput.value.trim()
+    },
+    argocd: {
+      application: projectArgocdApplicationInput.value.trim()
+    },
+    rollout: {
+      namespace: projectRolloutNamespaceInput.value.trim(),
+      name: projectRolloutNameInput.value.trim()
+    }
+  };
+}
+
+function projectToApp(project) {
+  return {
+    id: project.id,
+    name: project.name,
+    github: project.github,
+    argocd: project.argocd,
+    rollout: project.rollout
+  };
 }
 
 async function runAction(action) {

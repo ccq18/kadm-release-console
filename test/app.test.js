@@ -11,12 +11,44 @@ const appConfig = {
     workflow: "build-and-publish.yaml",
     ref: "main"
   },
+  gitops: {
+    owner: "ccq18",
+    repo: "kadm-app-configs",
+    path: "apps/demo-hello/overlays/prod",
+    image: "ghcr.io/ccq18/demo-hello",
+    ref: "main"
+  },
   argocd: {
     application: "demo-hello"
   },
   rollout: {
     namespace: "apps",
     name: "hello"
+  }
+};
+
+const secondAppConfig = {
+  id: "demo-hello-spring",
+  name: "Demo Hello Spring",
+  github: {
+    owner: "ccq18",
+    repo: "demo-hello-spring",
+    workflow: "build-and-publish.yaml",
+    ref: "main"
+  },
+  gitops: {
+    owner: "ccq18",
+    repo: "kadm-app-configs",
+    path: "apps/demo-hello-spring/overlays/prod",
+    image: "ghcr.io/ccq18/demo-hello-spring",
+    ref: "main"
+  },
+  argocd: {
+    application: "demo-hello-spring"
+  },
+  rollout: {
+    namespace: "apps",
+    name: "hellospring"
   }
 };
 
@@ -219,9 +251,111 @@ test("join script route rejects unsupported roles", async () => {
   }
 });
 
+test("projects route lists the current effective registry", async () => {
+  const server = await listen({
+    appRegistry: {
+      async listApps() {
+        return [appConfig, secondAppConfig];
+      }
+    }
+  });
+
+  try {
+    const data = await request(server, "/api/projects");
+
+    assert.deepEqual(data.projects.map((project) => project.id), ["demo-hello", "demo-hello-spring"]);
+    assert.equal(data.projects[0].gitops.path, "apps/demo-hello/overlays/prod");
+  } finally {
+    await close(server);
+  }
+});
+
+test("projects create route delegates to the effective-state registry", async () => {
+  const calls = [];
+  const server = await listen({
+    appRegistry: {
+      async listApps() {
+        return [appConfig];
+      },
+      async createApp(input) {
+        calls.push(input);
+        return secondAppConfig;
+      }
+    }
+  });
+
+  try {
+    const data = await request(server, "/api/projects", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(secondAppConfig)
+    });
+
+    assert.equal(data.project.id, "demo-hello-spring");
+    assert.deepEqual(calls, [secondAppConfig]);
+  } finally {
+    await close(server);
+  }
+});
+
+test("projects update route delegates to the effective-state registry", async () => {
+  const calls = [];
+  const server = await listen({
+    appRegistry: {
+      async listApps() {
+        return [appConfig];
+      },
+      async updateApp(id, patch) {
+        calls.push({ id, patch });
+        return { ...appConfig, name: "Demo Hello Updated" };
+      }
+    }
+  });
+
+  try {
+    const data = await request(server, "/api/projects/demo-hello", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "Demo Hello Updated" })
+    });
+
+    assert.equal(data.project.name, "Demo Hello Updated");
+    assert.deepEqual(calls, [{ id: "demo-hello", patch: { name: "Demo Hello Updated" } }]);
+  } finally {
+    await close(server);
+  }
+});
+
+test("projects delete route delegates to the effective-state registry", async () => {
+  const calls = [];
+  const server = await listen({
+    appRegistry: {
+      async listApps() {
+        return [appConfig];
+      },
+      async deleteApp(id) {
+        calls.push(id);
+        return { deleted: true, id };
+      }
+    }
+  });
+
+  try {
+    const data = await request(server, "/api/projects/demo-hello", {
+      method: "DELETE"
+    });
+
+    assert.equal(data.result.deleted, true);
+    assert.deepEqual(calls, ["demo-hello"]);
+  } finally {
+    await close(server);
+  }
+});
+
 async function listen(overrides = {}) {
   const app = createApp({
     apps: [appConfig],
+    appRegistry: overrides.appRegistry,
     github: overrides.github || {
       async listWorkflowRuns() {
         return [];

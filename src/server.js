@@ -4,13 +4,16 @@ import { ClusterService } from "./cluster.js";
 import { loadAppsConfig, requireEnv } from "./config.js";
 import { GitHubClient } from "./github.js";
 import { KubernetesRolloutsClient } from "./kubernetes.js";
+import { EffectiveProjectRegistryService } from "./projects.js";
 
 const env = process.env;
 const port = Number.parseInt(env.PORT || "8080", 10);
 const apps = loadAppsConfig();
+const appRegistry = EffectiveProjectRegistryService.fromEnv(env, { fallbackApps: apps });
 
 const server = createApp({
   apps,
+  appRegistry,
   github: new GitHubClient({
     token: requireEnv(env, "GITHUB_TOKEN")
   }),

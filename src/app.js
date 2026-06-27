@@ -2,20 +2,61 @@ import express from "express";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { ReleaseManager } from "./release-manager.js";
+import { createStaticAppRegistry, publicProject } from "./projects.js";
 import { deriveRolloutVersions, validatePromoteVersion } from "./versions.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-export function createApp({ apps, github, argocd, rollouts, releaseManager, cluster }) {
+export function createApp({ apps, appRegistry, github, argocd, rollouts, releaseManager, cluster }) {
   const server = express();
   const releases = releaseManager || new ReleaseManager({ github, argocd, rollouts });
+  const registry = appRegistry || createStaticAppRegistry(apps || []);
 
   server.use(express.json({ limit: "64kb" }));
   server.use(express.static(path.join(__dirname, "../public")));
 
-  server.get("/api/apps", (_req, res) => {
-    res.json({ apps: apps.map(publicApp) });
+  server.get("/api/apps", async (_req, res, next) => {
+    try {
+      res.json({ apps: (await registry.listApps()).map(publicApp) });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  server.get("/api/projects", async (_req, res, next) => {
+    try {
+      res.json({ projects: (await registry.listApps()).map(publicProject) });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  server.post("/api/projects", async (req, res, next) => {
+    try {
+      const project = await registry.createApp(req.body || {});
+      res.status(201).json({ project: publicProject(project) });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  server.patch("/api/projects/:id", async (req, res, next) => {
+    try {
+      const project = await registry.updateApp(req.params.id, req.body || {});
+      res.json({ project: publicProject(project) });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  server.delete("/api/projects/:id", async (req, res, next) => {
+    try {
+      const result = await registry.deleteApp(req.params.id);
+      res.json({ result });
+    } catch (error) {
+      next(error);
+    }
   });
 
   server.get("/api/cluster", async (_req, res, next) => {
@@ -44,7 +85,7 @@ export function createApp({ apps, github, argocd, rollouts, releaseManager, clus
 
   server.get("/api/apps/:id/status", async (req, res, next) => {
     try {
-      const app = findApp(apps, req.params.id);
+      const app = await registry.getApp(req.params.id);
       const [application, rollout, workflowRuns] = await Promise.allSettled([
         argocd.getApplication(app),
         rollouts.getRollout(app),
@@ -67,7 +108,7 @@ export function createApp({ apps, github, argocd, rollouts, releaseManager, clus
 
   server.get("/api/apps/:id/versions", async (req, res, next) => {
     try {
-      const app = findApp(apps, req.params.id);
+      const app = await registry.getApp(req.params.id);
       const rollout = await rollouts.getRollout(app);
       res.json({
         app: publicApp(app),
@@ -80,7 +121,7 @@ export function createApp({ apps, github, argocd, rollouts, releaseManager, clus
 
   server.post("/api/apps/:id/release", async (req, res, next) => {
     try {
-      const app = findApp(apps, req.params.id);
+      const app = await registry.getApp(req.params.id);
       logActionRequest("release", app, req.body);
       const releaseTask = releases.start(app, {
         imageTag: req.body?.imageTag
@@ -93,7 +134,7 @@ export function createApp({ apps, github, argocd, rollouts, releaseManager, clus
 
   server.post("/api/apps/:id/release/cancel", async (req, res, next) => {
     try {
-      const app = findApp(apps, req.params.id);
+      const app = await registry.getApp(req.params.id);
       logActionRequest("release/cancel", app, req.body);
       const releaseTask = releases.cancel(app.id);
       res.status(202).json({ app: publicApp(app), releaseTask });
@@ -104,7 +145,7 @@ export function createApp({ apps, github, argocd, rollouts, releaseManager, clus
 
   server.post("/api/apps/:id/build", async (req, res, next) => {
     try {
-      const app = findApp(apps, req.params.id);
+      const app = await registry.getApp(req.params.id);
       logActionRequest("build", app, req.body);
       const result = await github.dispatchWorkflow(app, {
         imageTag: req.body?.imageTag
@@ -117,7 +158,7 @@ export function createApp({ apps, github, argocd, rollouts, releaseManager, clus
 
   server.post("/api/apps/:id/sync", async (req, res, next) => {
     try {
-      const app = findApp(apps, req.params.id);
+      const app = await registry.getApp(req.params.id);
       logActionRequest("sync", app, req.body);
       const result = await argocd.syncApplication(app);
       res.status(202).json({ app: publicApp(app), result });
@@ -128,7 +169,7 @@ export function createApp({ apps, github, argocd, rollouts, releaseManager, clus
 
   server.post("/api/apps/:id/promote", async (req, res, next) => {
     try {
-      const app = findApp(apps, req.params.id);
+      const app = await registry.getApp(req.params.id);
       logActionRequest("promote", app, req.body);
       if (req.body?.versionHash) {
         const rollout = await rollouts.getRollout(app);
@@ -143,7 +184,7 @@ export function createApp({ apps, github, argocd, rollouts, releaseManager, clus
 
   server.post("/api/apps/:id/rollout/:action", async (req, res, next) => {
     try {
-      const app = findApp(apps, req.params.id);
+      const app = await registry.getApp(req.params.id);
       const action = req.params.action;
       logActionRequest(`rollout/${action}`, app, req.body);
       if (!["promote", "abort", "restart"].includes(action)) {
@@ -186,16 +227,6 @@ function publicApp(app) {
     argocd: app.argocd,
     rollout: app.rollout
   };
-}
-
-function findApp(apps, id) {
-  const app = apps.find((candidate) => candidate.id === id);
-  if (!app) {
-    const error = new Error(`Unknown app: ${id}`);
-    error.status = 404;
-    throw error;
-  }
-  return app;
 }
 
 function ensureCluster(cluster) {

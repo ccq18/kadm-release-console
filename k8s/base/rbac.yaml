@@ -1,6 +1,71 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
+  name: kadm-effective-registry
+  namespace: kadm
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - configmaps
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: kadm-effective-registry
+  namespace: kadm
+subjects:
+  - kind: ServiceAccount
+    name: kadm
+    namespace: kadm
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: kadm-effective-registry
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: kadm-project-applications
+  namespace: argocd
+rules:
+  - apiGroups:
+      - argoproj.io
+    resources:
+      - applications
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - patch
+      - delete
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: kadm-project-applications
+  namespace: argocd
+subjects:
+  - kind: ServiceAccount
+    name: kadm
+    namespace: kadm
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: kadm-project-applications
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
   name: kadm-rollouts
   namespace: apps
 rules:
