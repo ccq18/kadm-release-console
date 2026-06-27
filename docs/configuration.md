@@ -5,7 +5,8 @@
 | Variable | Purpose |
 | --- | --- |
 | `PORT` | HTTP port, defaults to `8080`. |
-| `ONECD_APPS_CONFIG` | Path to application config JSON. |
+| `KADM_APPS_CONFIG` | Preferred path to application config JSON. |
+| `ONECD_APPS_CONFIG` | Legacy alias for the application config path. |
 | `GITHUB_TOKEN` | Token used to trigger GitHub Actions and read workflow runs. |
 | `ARGOCD_BASE_URL` | Argo CD API server URL. |
 | `ARGOCD_TOKEN` | Argo CD API token. |
@@ -13,6 +14,8 @@
 | `KUBE_TOKEN` | Optional local Kubernetes bearer token. |
 
 In-cluster deployments use the mounted Kubernetes service account token automatically.
+
+`KADM_CLUSTER_NAME` is the preferred environment variable for the cluster name shown in the UI. `ONECD_CLUSTER_NAME` remains supported as a compatibility alias.
 
 ## Application Config
 

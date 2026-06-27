@@ -1,6 +1,6 @@
 import fs from "node:fs";
 
-export function loadAppsConfig(path = process.env.ONECD_APPS_CONFIG || "config/apps.json") {
+export function loadAppsConfig(path = process.env.KADM_APPS_CONFIG || process.env.ONECD_APPS_CONFIG || "config/apps.json") {
   const raw = fs.readFileSync(path, "utf8");
   return normalizeAppsConfig(JSON.parse(raw));
 }

@@ -14,7 +14,7 @@ export class ClusterService {
   static fromEnv(env = process.env) {
     return new ClusterService({
       kubernetes: KubernetesClusterClient.fromEnv(env),
-      clusterName: env.ONECD_CLUSTER_NAME || "default",
+      clusterName: env.KADM_CLUSTER_NAME || env.ONECD_CLUSTER_NAME || "default",
       joinServerUrl: env.K3S_JOIN_SERVER_URL || "",
       joinToken: env.K3S_JOIN_TOKEN || ""
     });
