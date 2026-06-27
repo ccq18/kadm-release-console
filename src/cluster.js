@@ -128,8 +128,30 @@ export function buildJoinScript({ role, serverUrl, token }) {
     script: [
       "#!/usr/bin/env bash",
       "set -euo pipefail",
+      `INSTALL_K3S_EXEC=${shellQuote(exec)}`,
+      "detect_private_ip() {",
+      '  if [ -n "${KADM_NODE_PRIVATE_IP:-}" ]; then',
+      '    printf "%s\\n" "${KADM_NODE_PRIVATE_IP}"',
+      "    return 0",
+      "  fi",
+      "  if command -v ip >/dev/null 2>&1; then",
+      "    ip -o -4 route show to default 2>/dev/null | awk '{print $7; exit}'",
+      "    return 0",
+      "  fi",
+      "  if command -v hostname >/dev/null 2>&1; then",
+      "    hostname -I 2>/dev/null | awk '{print $1}'",
+      "    return 0",
+      "  fi",
+      "}",
+      'NODE_PRIVATE_IP="$(detect_private_ip || true)"',
+      'if [ -n "${NODE_PRIVATE_IP}" ]; then',
+      '  INSTALL_K3S_EXEC="${INSTALL_K3S_EXEC} --node-ip ${NODE_PRIVATE_IP}"',
+      role === "master"
+        ? '  INSTALL_K3S_EXEC="${INSTALL_K3S_EXEC} --advertise-address ${NODE_PRIVATE_IP}"'
+        : '  :',
+      "fi",
       `export K3S_TOKEN=${shellQuote(token)}`,
-      `curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC=${shellQuote(exec)} sh -`
+      'curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="${INSTALL_K3S_EXEC}" sh -'
     ].join("\n")
   };
 }
