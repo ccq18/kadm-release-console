@@ -123,22 +123,6 @@ export class GitHubClient {
     return data.workflow_runs || [];
   }
 
-  async getRepositoryContent({ owner, repo, path, ref }) {
-    const request = buildGitHubContentRequest({
-      token: this.token,
-      owner,
-      repo,
-      path,
-      ref
-    });
-    const file = await sendJsonRequest(request, this.fetchImpl);
-    return Buffer.from(String(file.content || "").replace(/\n/g, ""), "base64").toString("utf8");
-  }
-
-  async getGitOpsRegistryFile({ owner, repo, path = "apps/apps.json", ref = "main" }) {
-    return this.getRepositoryContent({ owner, repo, path, ref });
-  }
-
   async updateGitOpsApp(app, imageTag) {
     const contentRequest = buildGitHubContentRequest({
       token: this.token,

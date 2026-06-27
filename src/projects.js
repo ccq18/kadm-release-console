@@ -5,6 +5,7 @@ import { joinUrl, jsonHeaders, sendJsonRequest } from "./request.js";
 const SERVICE_ACCOUNT_TOKEN = "/var/run/secrets/kubernetes.io/serviceaccount/token";
 const REGISTRY_NAMESPACE = "kadm";
 const REGISTRY_CONFIGMAP = "kadm-apps-config";
+const SOURCE_REGISTRY_CONFIGMAP = "kadm-source-apps-config";
 const REGISTRY_KEY = "apps.json";
 const ARGOCD_NAMESPACE = "argocd";
 const APPLICATION_MANAGER_LABEL = "kadm.ai/managed-by";
@@ -161,15 +162,21 @@ export class EffectiveProjectRegistryService {
   }
 }
 
-export class GitSourceProjectRegistry {
-  constructor({ github, fallbackApps = [] }) {
-    this.github = github;
+export class KubernetesSourceProjectRegistry {
+  constructor({ kubernetes, fallbackApps = [] }) {
+    this.kubernetes = kubernetes;
     this.fallbackApps = fallbackApps;
   }
 
+  static fromEnv(env = process.env, { fallbackApps = [] } = {}) {
+    return new KubernetesSourceProjectRegistry({
+      kubernetes: KubernetesProjectRegistryClient.fromEnv(env),
+      fallbackApps
+    });
+  }
+
   async listApps() {
-    const apps = await this.loadSourceApps();
-    return apps;
+    return this.loadSourceApps();
   }
 
   async getApp(id) {
@@ -177,9 +184,14 @@ export class GitSourceProjectRegistry {
   }
 
   async loadSourceApps() {
-    const location = inferSourceRegistryLocation(this.fallbackApps);
-    const file = await this.github.getGitOpsRegistryFile(location);
-    return normalizeAppsConfig(JSON.parse(file));
+    try {
+      return normalizeAppsConfig(await this.kubernetes.readSourceApps());
+    } catch (error) {
+      if (error.status === 404) {
+        return this.fallbackApps;
+      }
+      throw error;
+    }
   }
 }
 
@@ -203,20 +215,28 @@ export class KubernetesProjectRegistryClient {
     return new KubernetesProjectRegistryClient({ apiServer, token });
   }
 
-  async readRegistryApps() {
+  async readConfigMapApps(name) {
     const configMap = await sendJsonRequest(
       buildConfigMapGetRequest({
         apiServer: this.apiServer,
         token: this.token,
         namespace: REGISTRY_NAMESPACE,
-        name: REGISTRY_CONFIGMAP
+        name
       }),
       this.fetchImpl
     );
     return JSON.parse(configMap.data?.[REGISTRY_KEY] || "[]");
   }
 
-  async writeRegistryApps(apps) {
+  async readRegistryApps() {
+    return this.readConfigMapApps(REGISTRY_CONFIGMAP);
+  }
+
+  async readSourceApps() {
+    return this.readConfigMapApps(SOURCE_REGISTRY_CONFIGMAP);
+  }
+
+  async writeConfigMapApps(name, apps) {
     let existing = null;
     try {
       existing = await sendJsonRequest(
@@ -224,7 +244,7 @@ export class KubernetesProjectRegistryClient {
           apiServer: this.apiServer,
           token: this.token,
           namespace: REGISTRY_NAMESPACE,
-          name: REGISTRY_CONFIGMAP
+          name
         }),
         this.fetchImpl
       );
@@ -238,7 +258,7 @@ export class KubernetesProjectRegistryClient {
       apiVersion: "v1",
       kind: "ConfigMap",
       metadata: {
-        name: REGISTRY_CONFIGMAP,
+        name,
         namespace: REGISTRY_NAMESPACE
       },
       data: {
@@ -253,7 +273,7 @@ export class KubernetesProjectRegistryClient {
           apiServer: this.apiServer,
           token: this.token,
           namespace: REGISTRY_NAMESPACE,
-          name: REGISTRY_CONFIGMAP,
+          name,
           body: resource
         }),
         this.fetchImpl
@@ -269,6 +289,14 @@ export class KubernetesProjectRegistryClient {
       }),
       this.fetchImpl
     );
+  }
+
+  async writeRegistryApps(apps) {
+    return this.writeConfigMapApps(REGISTRY_CONFIGMAP, apps);
+  }
+
+  async writeSourceApps(apps) {
+    return this.writeConfigMapApps(SOURCE_REGISTRY_CONFIGMAP, apps);
   }
 
   async upsertApplication(app) {
@@ -497,19 +525,4 @@ function unsupportedRegistryMutation() {
   const error = new Error("Project registry mutations are not configured.");
   error.status = 503;
   return error;
-}
-
-function inferSourceRegistryLocation(apps) {
-  const app = apps[0];
-  if (!app?.gitops?.owner || !app?.gitops?.repo) {
-    const error = new Error("Source project registry location is not configured.");
-    error.status = 503;
-    throw error;
-  }
-  return {
-    owner: app.gitops.owner,
-    repo: app.gitops.repo,
-    ref: app.gitops.ref || "main",
-    path: "apps/apps.json"
-  };
 }

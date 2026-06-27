@@ -4,7 +4,7 @@ import test from "node:test";
 import {
   buildRegistryApplication,
   EffectiveProjectRegistryService,
-  GitSourceProjectRegistry
+  KubernetesSourceProjectRegistry
 } from "../src/projects.js";
 
 const baseApp = {
@@ -135,16 +135,12 @@ test("EffectiveProjectRegistryService rejects renaming a project id or Argo Appl
   );
 });
 
-test("GitSourceProjectRegistry loads source projects from the Git-defined apps.json", async () => {
-  const source = new GitSourceProjectRegistry({
+test("KubernetesSourceProjectRegistry loads cached source projects from the cluster registry cache", async () => {
+  const source = new KubernetesSourceProjectRegistry({
     fallbackApps: [baseApp],
-    github: {
-      async getGitOpsRegistryFile({ owner, repo, path, ref }) {
-        assert.equal(owner, "ccq18");
-        assert.equal(repo, "kadm-app-configs");
-        assert.equal(path, "apps/apps.json");
-        assert.equal(ref, "main");
-        return JSON.stringify([baseApp]);
+    kubernetes: {
+      async readSourceApps() {
+        return [baseApp];
       }
     }
   });
