@@ -81,6 +81,7 @@ export function createApp({ apps, github, argocd, rollouts, releaseManager, clus
   server.post("/api/apps/:id/release", async (req, res, next) => {
     try {
       const app = findApp(apps, req.params.id);
+      logActionRequest("release", app, req.body);
       const releaseTask = releases.start(app, {
         imageTag: req.body?.imageTag
       });
@@ -93,6 +94,7 @@ export function createApp({ apps, github, argocd, rollouts, releaseManager, clus
   server.post("/api/apps/:id/release/cancel", async (req, res, next) => {
     try {
       const app = findApp(apps, req.params.id);
+      logActionRequest("release/cancel", app, req.body);
       const releaseTask = releases.cancel(app.id);
       res.status(202).json({ app: publicApp(app), releaseTask });
     } catch (error) {
@@ -103,6 +105,7 @@ export function createApp({ apps, github, argocd, rollouts, releaseManager, clus
   server.post("/api/apps/:id/build", async (req, res, next) => {
     try {
       const app = findApp(apps, req.params.id);
+      logActionRequest("build", app, req.body);
       const result = await github.dispatchWorkflow(app, {
         imageTag: req.body?.imageTag
       });
@@ -115,6 +118,7 @@ export function createApp({ apps, github, argocd, rollouts, releaseManager, clus
   server.post("/api/apps/:id/sync", async (req, res, next) => {
     try {
       const app = findApp(apps, req.params.id);
+      logActionRequest("sync", app, req.body);
       const result = await argocd.syncApplication(app);
       res.status(202).json({ app: publicApp(app), result });
     } catch (error) {
@@ -125,6 +129,7 @@ export function createApp({ apps, github, argocd, rollouts, releaseManager, clus
   server.post("/api/apps/:id/promote", async (req, res, next) => {
     try {
       const app = findApp(apps, req.params.id);
+      logActionRequest("promote", app, req.body);
       if (req.body?.versionHash) {
         const rollout = await rollouts.getRollout(app);
         validatePromoteVersion(deriveRolloutVersions(rollout), req.body.versionHash);
@@ -140,6 +145,7 @@ export function createApp({ apps, github, argocd, rollouts, releaseManager, clus
     try {
       const app = findApp(apps, req.params.id);
       const action = req.params.action;
+      logActionRequest(`rollout/${action}`, app, req.body);
       if (!["promote", "abort", "restart"].includes(action)) {
         res.status(400).json({ error: "Unsupported rollout action." });
         return;
@@ -205,4 +211,16 @@ function settledValue(result, fallback = null) {
     return result.value;
   }
   return { error: result.reason?.message || "request failed", fallback };
+}
+
+function logActionRequest(action, app, body) {
+  console.log(
+    JSON.stringify({
+      type: "action-request",
+      at: new Date().toISOString(),
+      action,
+      appId: app.id,
+      body: body || {}
+    })
+  );
 }

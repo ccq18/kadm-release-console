@@ -236,6 +236,19 @@ export class ReleaseManager {
     if (!isRunning(task)) {
       return;
     }
+    if (patch.stage || patch.message) {
+      console.log(
+        JSON.stringify({
+          type: "release-task",
+          at: this.timestamp(),
+          appId: task.appId,
+          taskId: task.id,
+          stage: patch.stage || task.stage,
+          message: patch.message || task.message,
+          status: task.status
+        })
+      );
+    }
     Object.assign(task, patch, { updatedAt: this.timestamp() });
   }
 
