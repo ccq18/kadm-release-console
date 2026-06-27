@@ -13,6 +13,12 @@ test("normalizes the two default applications", () => {
         workflow: "build-and-publish.yaml",
         ref: "main"
       },
+      gitops: {
+        owner: "ccq18",
+        repo: "kadm-app-configs",
+        path: "apps/demo-hello/overlays/prod",
+        image: "ghcr.io/ccq18/demo-hello"
+      },
       argocd: { application: "demo-hello" },
       rollout: { namespace: "apps", name: "hello" }
     }
@@ -20,6 +26,8 @@ test("normalizes the two default applications", () => {
 
   assert.equal(apps[0].id, "demo-hello");
   assert.equal(apps[0].github.ref, "main");
+  assert.equal(apps[0].gitops.repo, "kadm-app-configs");
+  assert.equal(apps[0].gitops.path, "apps/demo-hello/overlays/prod");
   assert.equal(apps[0].argocd.application, "demo-hello");
   assert.equal(apps[0].rollout.namespace, "apps");
 });

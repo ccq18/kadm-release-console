@@ -101,12 +101,15 @@ export class ReleaseManager {
         stage: "building",
         message: "构建已触发，正在等待 GitHub Actions 完成。"
       });
-      await this.waitForBuild(task, app, knownWorkflowRunIds);
+      const buildRun = await this.waitForBuild(task, app, knownWorkflowRunIds);
+      const resolvedImageTag = imageTag || inferImageTag(buildRun);
 
       this.updateTask(task, {
         stage: "deploying",
-        message: "构建成功，正在同步 Argo CD。"
+        message: "构建成功，正在更新 GitOps 并同步 Argo CD。"
       });
+      this.assertContinuing(task);
+      await this.github.updateGitOpsApp(app, resolvedImageTag);
       this.assertContinuing(task);
       await this.argocd.syncApplication(app);
 
@@ -352,6 +355,14 @@ function snapshotTask(task) {
     completedAt: task.completedAt,
     error: task.error
   };
+}
+
+function inferImageTag(run) {
+  const sha = run?.head_sha || run?.headSha || "";
+  if (sha.length >= 7) {
+    return `sha-${sha.slice(0, 7)}`;
+  }
+  throw new Error("Build workflow finished without a usable head SHA.");
 }
 
 function defaultSleep(ms) {

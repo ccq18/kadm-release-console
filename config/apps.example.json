@@ -8,6 +8,13 @@
       "workflow": "build-and-publish.yaml",
       "ref": "main"
     },
+    "gitops": {
+      "owner": "ccq18",
+      "repo": "kadm-app-configs",
+      "path": "apps/demo-hello/overlays/prod",
+      "image": "ghcr.io/ccq18/demo-hello",
+      "ref": "main"
+    },
     "argocd": {
       "application": "demo-hello"
     },
@@ -23,6 +30,13 @@
       "owner": "ccq18",
       "repo": "demo-hello-spring",
       "workflow": "build-and-publish.yaml",
+      "ref": "main"
+    },
+    "gitops": {
+      "owner": "ccq18",
+      "repo": "kadm-app-configs",
+      "path": "apps/demo-hello-spring/overlays/prod",
+      "image": "ghcr.io/ccq18/demo-hello-spring",
       "ref": "main"
     },
     "argocd": {

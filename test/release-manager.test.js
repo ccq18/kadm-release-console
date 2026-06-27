@@ -4,7 +4,8 @@ import { ReleaseManager } from "../src/release-manager.js";
 
 const app = {
   id: "demo-hello",
-  github: { ref: "main" }
+  github: { ref: "main" },
+  gitops: { owner: "ccq18", repo: "kadm-app-configs", path: "apps/demo-hello/overlays/prod", image: "ghcr.io/ccq18/demo-hello", ref: "main" }
 };
 
 test("runs publish through build, deploy, and canary check", async () => {
@@ -16,6 +17,10 @@ test("runs publish through build, deploy, and canary check", async () => {
         events.push(`dispatch:${targetApp.id}:${imageTag}`);
         return { dispatched: true };
       },
+      async updateGitOpsApp(targetApp, imageTag) {
+        events.push(`gitops:${targetApp.id}:${imageTag}`);
+        return { updated: true };
+      },
       async listWorkflowRuns() {
         events.push("runs");
         runPolls += 1;
@@ -24,7 +29,7 @@ test("runs publish through build, deploy, and canary check", async () => {
         }
         return runPolls === 2
           ? [{ id: 1, status: "queued", conclusion: null, created_at: "2026-06-26T00:00:01.000Z" }]
-          : [{ id: 1, status: "completed", conclusion: "success", created_at: "2026-06-26T00:00:01.000Z" }];
+          : [{ id: 1, status: "completed", conclusion: "success", created_at: "2026-06-26T00:00:01.000Z", head_sha: "abc123456789" }];
       }
     },
     argocd: {
@@ -55,7 +60,7 @@ test("runs publish through build, deploy, and canary check", async () => {
   assert.equal(completed.status, "succeeded");
   assert.equal(completed.stage, "ready");
   assert.match(completed.message, /等待放量/);
-  assert.deepEqual(events, ["runs", "dispatch:demo-hello:sha-abc1234", "runs", "runs", "sync", "app", "rollout"]);
+  assert.deepEqual(events, ["runs", "dispatch:demo-hello:sha-abc1234", "runs", "runs", "gitops:demo-hello:sha-abc1234", "sync", "app", "rollout"]);
 });
 
 test("waits for the workflow run created by this publish", async () => {
@@ -64,6 +69,10 @@ test("waits for the workflow run created by this publish", async () => {
     github: {
       async dispatchWorkflow() {
         return { dispatched: true };
+      },
+      async updateGitOpsApp(_targetApp, imageTag) {
+        assert.equal(imageTag, "sha-abcdef0");
+        return { updated: true };
       },
       async listWorkflowRuns() {
         runPolls += 1;
@@ -74,7 +83,7 @@ test("waits for the workflow run created by this publish", async () => {
           return [{ id: 1, status: "completed", conclusion: "success", created_at: "2026-06-26T00:00:00.000Z" }];
         }
         return [
-          { id: 2, status: "completed", conclusion: "success", created_at: "2026-06-26T00:00:02.000Z" },
+          { id: 2, status: "completed", conclusion: "success", created_at: "2026-06-26T00:00:02.000Z", head_sha: "abcdef012345" },
           { id: 1, status: "completed", conclusion: "success", created_at: "2026-06-26T00:00:00.000Z" }
         ];
       }
@@ -110,11 +119,14 @@ test("rejects a second publish while one is already running for the same app", a
       async dispatchWorkflow() {
         return { dispatched: true };
       },
+      async updateGitOpsApp() {
+        return { updated: true };
+      },
       async listWorkflowRuns() {
         runPolls += 1;
         return runPolls === 1
           ? []
-          : [{ id: 1, status: "completed", conclusion: "success", created_at: "2026-06-26T00:00:01.000Z" }];
+          : [{ id: 1, status: "completed", conclusion: "success", created_at: "2026-06-26T00:00:01.000Z", head_sha: "abcdef012345" }];
       }
     },
     argocd: {
@@ -150,6 +162,9 @@ test("marks publish failed when the build workflow fails", async () => {
       async dispatchWorkflow() {
         return { dispatched: true };
       },
+      async updateGitOpsApp() {
+        throw new Error("sync should not run after a failed build");
+      },
       async listWorkflowRuns() {
         runPolls += 1;
         if (runPolls === 1) {
@@ -181,6 +196,9 @@ test("cancels an in-memory publish task", async () => {
     github: {
       async dispatchWorkflow() {
         return { dispatched: true };
+      },
+      async updateGitOpsApp() {
+        return { updated: true };
       },
       async listWorkflowRuns() {
         return [{ id: 1, status: "queued", conclusion: null, created_at: "2026-06-26T00:00:01.000Z" }];

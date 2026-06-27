@@ -17,6 +17,10 @@ export function normalizeAppsConfig(input) {
     requireValue(app.github?.owner, `${prefix}.github.owner`);
     requireValue(app.github?.repo, `${prefix}.github.repo`);
     requireValue(app.github?.workflow, `${prefix}.github.workflow`);
+    requireValue(app.gitops?.owner, `${prefix}.gitops.owner`);
+    requireValue(app.gitops?.repo, `${prefix}.gitops.repo`);
+    requireValue(app.gitops?.path, `${prefix}.gitops.path`);
+    requireValue(app.gitops?.image, `${prefix}.gitops.image`);
     requireValue(app.argocd?.application, `${prefix}.argocd.application`);
     requireValue(app.rollout?.namespace, `${prefix}.rollout.namespace`);
     requireValue(app.rollout?.name, `${prefix}.rollout.name`);
@@ -29,6 +33,13 @@ export function normalizeAppsConfig(input) {
         repo: app.github.repo,
         workflow: app.github.workflow,
         ref: app.github.ref || "main"
+      },
+      gitops: {
+        owner: app.gitops.owner,
+        repo: app.gitops.repo,
+        path: app.gitops.path,
+        image: app.gitops.image,
+        ref: app.gitops.ref || "main"
       },
       argocd: {
         application: app.argocd.application
