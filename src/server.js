@@ -16,7 +16,8 @@ const server = createApp({
   }),
   argocd: new ArgoCdClient({
     baseUrl: requireEnv(env, "ARGOCD_BASE_URL"),
-    token: requireEnv(env, "ARGOCD_TOKEN")
+    token: requireEnv(env, "ARGOCD_TOKEN"),
+    insecureTLS: env.KADM_ARGOCD_INSECURE_TLS === "true" || env.ONECD_ARGOCD_INSECURE_TLS === "true"
   }),
   rollouts: KubernetesRolloutsClient.fromEnv(env),
   cluster: ClusterService.fromEnv(env)

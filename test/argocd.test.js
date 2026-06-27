@@ -6,12 +6,14 @@ test("builds an Argo CD application status request", () => {
   const request = buildApplicationRequest({
     baseUrl: "https://argocd.example.com/",
     token: "argocd-token",
-    application: "demo-hello"
+    application: "demo-hello",
+    insecureTLS: true
   });
 
   assert.equal(request.url, "https://argocd.example.com/api/v1/applications/demo-hello");
   assert.equal(request.method, "GET");
   assert.equal(request.headers.Authorization, "Bearer argocd-token");
+  assert.equal(request.insecureTLS, true);
 });
 
 test("builds an Argo CD sync request", () => {

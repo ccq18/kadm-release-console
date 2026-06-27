@@ -1,14 +1,14 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: onecd
-  namespace: onecd
+  name: kadm
+  namespace: kadm
   labels:
-    app.kubernetes.io/name: onecd
+    app.kubernetes.io/name: kadm
 spec:
   type: ClusterIP
   selector:
-    app.kubernetes.io/name: onecd
+    app.kubernetes.io/name: kadm
   ports:
     - name: http
       port: 80

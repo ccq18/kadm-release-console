@@ -1,14 +1,15 @@
 import { joinUrl, jsonHeaders, sendJsonRequest } from "./request.js";
 
-export function buildApplicationRequest({ baseUrl, token, application }) {
+export function buildApplicationRequest({ baseUrl, token, application, insecureTLS = false }) {
   return {
     url: joinUrl(baseUrl, `/api/v1/applications/${encodeURIComponent(application)}`),
     method: "GET",
-    headers: jsonHeaders(token)
+    headers: jsonHeaders(token),
+    insecureTLS
   };
 }
 
-export function buildSyncRequest({ baseUrl, token, application, revision }) {
+export function buildSyncRequest({ baseUrl, token, application, revision, insecureTLS = false }) {
   const body = {
     prune: true,
     dryRun: false
@@ -22,15 +23,17 @@ export function buildSyncRequest({ baseUrl, token, application, revision }) {
     url: joinUrl(baseUrl, `/api/v1/applications/${encodeURIComponent(application)}/sync`),
     method: "POST",
     headers: jsonHeaders(token),
-    body: JSON.stringify(body)
+    body: JSON.stringify(body),
+    insecureTLS
   };
 }
 
 export class ArgoCdClient {
-  constructor({ baseUrl, token, fetchImpl }) {
+  constructor({ baseUrl, token, fetchImpl, insecureTLS = false }) {
     this.baseUrl = baseUrl;
     this.token = token;
     this.fetchImpl = fetchImpl;
+    this.insecureTLS = insecureTLS;
   }
 
   async getApplication(app) {
@@ -38,7 +41,8 @@ export class ArgoCdClient {
       buildApplicationRequest({
         baseUrl: this.baseUrl,
         token: this.token,
-        application: app.argocd.application
+        application: app.argocd.application,
+        insecureTLS: this.insecureTLS
       }),
       this.fetchImpl
     );
@@ -50,7 +54,8 @@ export class ArgoCdClient {
         baseUrl: this.baseUrl,
         token: this.token,
         application: app.argocd.application,
-        revision: app.github.ref
+        revision: app.github.ref,
+        insecureTLS: this.insecureTLS
       }),
       this.fetchImpl
     );

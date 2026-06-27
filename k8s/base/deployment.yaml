@@ -1,25 +1,25 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: onecd
-  namespace: onecd
+  name: kadm
+  namespace: kadm
   labels:
-    app.kubernetes.io/name: onecd
+    app.kubernetes.io/name: kadm
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app.kubernetes.io/name: onecd
+      app.kubernetes.io/name: kadm
   template:
     metadata:
       labels:
-        app.kubernetes.io/name: onecd
+        app.kubernetes.io/name: kadm
     spec:
-      serviceAccountName: onecd
+      serviceAccountName: kadm
       imagePullSecrets:
         - name: ghcr-cred
       containers:
-        - name: onecd
+        - name: kadm
           image: ghcr.io/ccq18/kadm-release-console:sha-initial
           imagePullPolicy: IfNotPresent
           ports:
@@ -28,46 +28,48 @@ spec:
           env:
             - name: PORT
               value: "8080"
-            - name: ONECD_APPS_CONFIG
-              value: /etc/onecd/apps.json
+            - name: KADM_APPS_CONFIG
+              value: /etc/kadm/apps.json
             - name: NODE_EXTRA_CA_CERTS
               value: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
             - name: GITHUB_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name: onecd-secrets
+                  name: kadm-secrets
                   key: GITHUB_TOKEN
             - name: ARGOCD_BASE_URL
               valueFrom:
                 secretKeyRef:
-                  name: onecd-secrets
+                  name: kadm-secrets
                   key: ARGOCD_BASE_URL
             - name: ARGOCD_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name: onecd-secrets
+                  name: kadm-secrets
                   key: ARGOCD_TOKEN
-            - name: ONECD_CLUSTER_NAME
+            - name: KADM_ARGOCD_INSECURE_TLS
+              value: "true"
+            - name: KADM_CLUSTER_NAME
               valueFrom:
                 secretKeyRef:
-                  name: onecd-secrets
-                  key: ONECD_CLUSTER_NAME
+                  name: kadm-secrets
+                  key: KADM_CLUSTER_NAME
                   optional: true
             - name: K3S_JOIN_SERVER_URL
               valueFrom:
                 secretKeyRef:
-                  name: onecd-secrets
+                  name: kadm-secrets
                   key: K3S_JOIN_SERVER_URL
                   optional: true
             - name: K3S_JOIN_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name: onecd-secrets
+                  name: kadm-secrets
                   key: K3S_JOIN_TOKEN
                   optional: true
           volumeMounts:
             - name: config
-              mountPath: /etc/onecd
+              mountPath: /etc/kadm
               readOnly: true
           readinessProbe:
             httpGet:
@@ -91,4 +93,4 @@ spec:
       volumes:
         - name: config
           configMap:
-            name: onecd-config
+            name: kadm-config

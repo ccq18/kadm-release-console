@@ -1,7 +1,7 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: onecd-rollouts
+  name: kadm-rollouts
   namespace: apps
 rules:
   - apiGroups:
@@ -25,21 +25,21 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: onecd-rollouts
+  name: kadm-rollouts
   namespace: apps
 subjects:
   - kind: ServiceAccount
-    name: onecd
-    namespace: onecd
+    name: kadm
+    namespace: kadm
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: onecd-rollouts
+  name: kadm-rollouts
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: onecd-cluster-read
+  name: kadm-cluster-read
 rules:
   - apiGroups:
       - ""
@@ -53,12 +53,12 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: onecd-cluster-read
+  name: kadm-cluster-read
 subjects:
   - kind: ServiceAccount
-    name: onecd
-    namespace: onecd
+    name: kadm
+    namespace: kadm
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: onecd-cluster-read
+  name: kadm-cluster-read

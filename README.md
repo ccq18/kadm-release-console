@@ -29,7 +29,7 @@ Required environment variables are documented in `docs/configuration.md`.
 Use port-forwarding from an authenticated kubectl session:
 
 ```bash
-kubectl -n onecd port-forward svc/onecd 18080:80
+kubectl -n kadm port-forward svc/kadm 18080:80
 ```
 
 Then open:
@@ -63,7 +63,7 @@ The Web console includes a `集群节点` view. It shows Master / Worker counts,
 The join-script API requires these deployment secret keys:
 
 ```text
-ONECD_CLUSTER_NAME
+KADM_CLUSTER_NAME
 K3S_JOIN_SERVER_URL
 K3S_JOIN_TOKEN
 ```

@@ -10,6 +10,7 @@
 | `GITHUB_TOKEN` | Token used to trigger GitHub Actions and read workflow runs. |
 | `ARGOCD_BASE_URL` | Argo CD API server URL. |
 | `ARGOCD_TOKEN` | Argo CD API token. |
+| `KADM_ARGOCD_INSECURE_TLS` | Optional `true` to allow self-signed Argo CD server certificates. |
 | `KUBE_API_SERVER` | Optional local Kubernetes API URL. |
 | `KUBE_TOKEN` | Optional local Kubernetes bearer token. |
 
@@ -34,4 +35,4 @@ KADM Release Console needs read and patch access to Argo Rollouts in the `apps` 
 - `argoproj.io/rollouts`
 - `argoproj.io/rollouts/status`
 
-The default Kustomize base creates a `onecd` ServiceAccount and binds it to a Role in `apps`.
+The default Kustomize base creates a `kadm` ServiceAccount and binds it to a Role in `apps`.

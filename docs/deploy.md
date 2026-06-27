@@ -19,18 +19,18 @@ gh workflow run build-and-publish.yaml
 Do not commit real tokens. Create the secret in the cluster:
 
 ```bash
-kubectl create namespace onecd --dry-run=client -o yaml | kubectl apply -f -
+kubectl create namespace kadm --dry-run=client -o yaml | kubectl apply -f -
 
-kubectl -n onecd create secret generic onecd-secrets \
+kubectl -n kadm create secret generic kadm-secrets \
   --from-literal=GITHUB_TOKEN=<github-token> \
-  --from-literal=ARGOCD_BASE_URL=http://argocd-server.argocd.svc.cluster.local \
+  --from-literal=ARGOCD_BASE_URL=https://argocd-server.argocd.svc.cluster.local \
   --from-literal=ARGOCD_TOKEN=<argocd-token>
 ```
 
-Create an image pull secret in the `onecd` namespace if the GHCR package is private:
+Create an image pull secret in the `kadm` namespace if the GHCR package is private:
 
 ```bash
-kubectl -n onecd create secret docker-registry ghcr-cred \
+kubectl -n kadm create secret docker-registry ghcr-cred \
   --docker-server=ghcr.io \
   --docker-username=<github-user> \
   --docker-password=<github-token>
@@ -51,7 +51,7 @@ kubectl apply -k k8s/overlays/prod
 KADM Release Console is not exposed through Ingress by default. Access it through port-forwarding:
 
 ```bash
-kubectl -n onecd port-forward svc/onecd 18080:80
+kubectl -n kadm port-forward svc/kadm 18080:80
 ```
 
 Open:
