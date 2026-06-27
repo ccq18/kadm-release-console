@@ -23,6 +23,7 @@ const clusterNotice = document.querySelector("#clusterNotice");
 const projectNotice = document.querySelector("#projectNotice");
 const imageTagInput = document.querySelector("#imageTagInput");
 const versionSelect = document.querySelector("#versionSelect");
+const versionInventory = document.querySelector("#versionInventory");
 const releaseWorkspace = document.querySelector("#releaseWorkspace");
 const clusterWorkspace = document.querySelector("#clusterWorkspace");
 const projectWorkspace = document.querySelector("#projectWorkspace");
@@ -358,6 +359,7 @@ function renderStatus(status) {
 
   appTitle.textContent = app.name;
   renderVersions(versions);
+  renderVersionInventory(versions);
   renderStage(stage);
   updateActionStates(stage, status, versions);
 
@@ -517,6 +519,38 @@ function renderVersions(versions) {
   versionSelect.disabled = promotable.length === 0;
 }
 
+function renderVersionInventory(versions) {
+  versionInventory.innerHTML = versions.length
+    ? versions
+        .map((version) => {
+          const roleText = version.role === "candidate"
+            ? "候选版本"
+            : version.role === "stable"
+              ? "稳定版本"
+              : "历史版本";
+          const trafficText = version.receivingTraffic ? "接入流量" : "无流量";
+          const deleteButton = version.canDelete
+            ? `<button class="secondary-action version-delete-button" type="button" data-version-hash="${escapeHtml(version.hash)}">删除版本</button>`
+            : "";
+
+          return `<article class="version-row">
+    <div>
+      <strong>${escapeHtml(version.hash)}</strong>
+      <small>${escapeHtml(roleText)} / ${escapeHtml(trafficText)} / ${escapeHtml(version.replicas.ready)}/${escapeHtml(version.replicas.total)} Ready</small>
+    </div>
+    <div class="version-actions">
+      ${deleteButton}
+    </div>
+  </article>`;
+        })
+        .join("")
+    : `<p class="empty-state">暂无版本数据。</p>`;
+
+  for (const button of versionInventory.querySelectorAll(".version-delete-button")) {
+    button.addEventListener("click", () => deleteVersion(button.getAttribute("data-version-hash")));
+  }
+}
+
 function updateActionStates(stage, status, versions) {
   const releaseButton = document.querySelector("#releaseButton");
   const promoteButton = document.querySelector("#promoteButton");
@@ -542,6 +576,27 @@ function actionBody(action) {
     return { versionHash: versionSelect.value };
   }
   return {};
+}
+
+async function deleteVersion(versionHash) {
+  if (!activeAppId || !versionHash) {
+    return;
+  }
+  const confirmed = window.confirm(`确认删除历史版本 ${versionHash} 吗？只有无流量版本允许删除。`);
+  if (!confirmed) {
+    return;
+  }
+
+  try {
+    notice.textContent = `正在删除版本 ${versionHash}`;
+    await api(`/api/apps/${encodeURIComponent(activeAppId)}/versions/${encodeURIComponent(versionHash)}`, {
+      method: "DELETE"
+    });
+    notice.textContent = `版本 ${versionHash} 已删除`;
+    await refreshStatus();
+  } catch (error) {
+    notice.textContent = `删除版本失败：${error.message}`;
+  }
 }
 
 function scheduleAutoRefresh(status) {

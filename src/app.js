@@ -3,7 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { ReleaseManager } from "./release-manager.js";
 import { createStaticAppRegistry, createStaticSourceProjectRegistry, publicProject } from "./projects.js";
-import { deriveRolloutVersions, validatePromoteVersion } from "./versions.js";
+import { deriveRolloutVersions, validateDeleteVersion, validatePromoteVersion } from "./versions.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -105,20 +105,23 @@ export function createApp({ apps, appRegistry, sourceProjectRegistry, github, ar
   server.get("/api/apps/:id/status", async (req, res, next) => {
     try {
       const app = await registry.getApp(req.params.id);
-      const [application, rollout, workflowRuns] = await Promise.allSettled([
+      const [application, rollout, replicaSets, workflowRuns] = await Promise.allSettled([
         argocd.getApplication(app),
         rollouts.getRollout(app),
+        loadReplicaSets(rollouts, app),
         github.listWorkflowRuns(app)
       ]);
       const rolloutValue = settledValue(rollout);
+      const replicaSetsValue = settledValue(replicaSets, []);
 
       res.json({
         app: publicApp(app),
         argocd: settledValue(application),
         rollout: rolloutValue,
+        replicaSets: replicaSetsValue,
         workflowRuns: settledValue(workflowRuns, []),
         releaseTask: releases.getTask(app.id),
-        versions: rollout.status === "fulfilled" ? deriveRolloutVersions(rolloutValue) : []
+        versions: rollout.status === "fulfilled" ? deriveRolloutVersions(rolloutValue, replicaSetsValue) : []
       });
     } catch (error) {
       next(error);
@@ -128,11 +131,29 @@ export function createApp({ apps, appRegistry, sourceProjectRegistry, github, ar
   server.get("/api/apps/:id/versions", async (req, res, next) => {
     try {
       const app = await registry.getApp(req.params.id);
-      const rollout = await rollouts.getRollout(app);
+      const [rollout, replicaSets] = await Promise.all([
+        rollouts.getRollout(app),
+        loadReplicaSets(rollouts, app)
+      ]);
       res.json({
         app: publicApp(app),
-        versions: deriveRolloutVersions(rollout)
+        versions: deriveRolloutVersions(rollout, replicaSets)
       });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  server.delete("/api/apps/:id/versions/:hash", async (req, res, next) => {
+    try {
+      const app = await registry.getApp(req.params.id);
+      const [rollout, replicaSets] = await Promise.all([
+        rollouts.getRollout(app),
+        loadReplicaSets(rollouts, app)
+      ]);
+      const version = validateDeleteVersion(deriveRolloutVersions(rollout, replicaSets), req.params.hash);
+      const result = await rollouts.deleteReplicaSet(app, version.resourceName);
+      res.status(202).json({ app: publicApp(app), version, result });
     } catch (error) {
       next(error);
     }
@@ -254,6 +275,13 @@ function ensureCluster(cluster) {
     error.status = 503;
     throw error;
   }
+}
+
+async function loadReplicaSets(rollouts, app) {
+  if (typeof rollouts.getReplicaSets !== "function") {
+    return [];
+  }
+  return rollouts.getReplicaSets(app);
 }
 
 function settledValue(result, fallback = null) {

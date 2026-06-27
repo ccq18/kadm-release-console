@@ -402,6 +402,63 @@ test("projects sync route imports a Git-defined project into the effective regis
   }
 });
 
+test("version delete route removes an inactive retained revision", async () => {
+  const deletions = [];
+  const server = await listen({
+    rollouts: {
+      async getRollout() {
+        return {
+          status: {
+            phase: "Healthy",
+            stableRS: "new-hash",
+            currentPodHash: "new-hash"
+          }
+        };
+      },
+      async getReplicaSets() {
+        return [
+          {
+            metadata: {
+              name: "hello-new-hash",
+              creationTimestamp: "2026-06-28T00:00:00Z",
+              labels: { "rollouts-pod-template-hash": "new-hash" }
+            },
+            spec: { replicas: 2 },
+            status: { replicas: 2, readyReplicas: 2 }
+          },
+          {
+            metadata: {
+              name: "hello-old-hash",
+              creationTimestamp: "2026-06-27T00:00:00Z",
+              labels: { "rollouts-pod-template-hash": "old-hash" }
+            },
+            spec: { replicas: 0 },
+            status: { replicas: 0, readyReplicas: 0 }
+          }
+        ];
+      },
+      async deleteReplicaSet(app, replicaSet) {
+        deletions.push({ appId: app.id, replicaSet });
+        return { deleted: true };
+      },
+      async runAction() {
+        return {};
+      }
+    }
+  });
+
+  try {
+    const data = await request(server, "/api/apps/demo-hello/versions/old-hash", {
+      method: "DELETE"
+    });
+
+    assert.equal(data.result.deleted, true);
+    assert.deepEqual(deletions, [{ appId: "demo-hello", replicaSet: "hello-old-hash" }]);
+  } finally {
+    await close(server);
+  }
+});
+
 async function listen(overrides = {}) {
   const app = createApp({
     apps: [appConfig],
@@ -420,6 +477,12 @@ async function listen(overrides = {}) {
     rollouts: overrides.rollouts || {
       async getRollout() {
         return { status: { phase: "Healthy", stableRS: "stable-hash", currentPodHash: "stable-hash" } };
+      },
+      async getReplicaSets() {
+        return [];
+      },
+      async deleteReplicaSet() {
+        return { deleted: true };
       },
       async runAction() {
         return {};

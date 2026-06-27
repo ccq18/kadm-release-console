@@ -455,6 +455,38 @@ input:disabled {
   justify-content: flex-start;
 }
 
+.version-inventory {
+  display: grid;
+  gap: 8px;
+}
+
+.version-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #f8fafb;
+}
+
+.version-row strong,
+.version-row small {
+  display: block;
+}
+
+.version-row small {
+  margin-top: 6px;
+  color: var(--muted);
+}
+
+.version-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
 .node-row {
   display: grid;
   grid-template-columns: minmax(160px, 0.8fr) minmax(0, 1.2fr);

@@ -11,6 +11,33 @@ export function buildRolloutGetRequest({ apiServer, token, namespace, rollout })
   };
 }
 
+export function buildReplicaSetsRequest({ apiServer, token, namespace, labelSelector }) {
+  const params = new URLSearchParams();
+  if (labelSelector) {
+    params.set("labelSelector", labelSelector);
+  }
+
+  return {
+    url: joinUrl(
+      apiServer,
+      `/apis/apps/v1/namespaces/${encodeURIComponent(namespace)}/replicasets${params.toString() ? `?${params.toString()}` : ""}`
+    ),
+    method: "GET",
+    headers: jsonHeaders(token)
+  };
+}
+
+export function buildReplicaSetDeleteRequest({ apiServer, token, namespace, replicaSet }) {
+  return {
+    url: joinUrl(
+      apiServer,
+      `/apis/apps/v1/namespaces/${encodeURIComponent(namespace)}/replicasets/${encodeURIComponent(replicaSet)}`
+    ),
+    method: "DELETE",
+    headers: jsonHeaders(token)
+  };
+}
+
 export function buildRolloutActionPatch(action, now = new Date()) {
   if (action === "promote") {
     return { status: { promoteFull: true } };
@@ -67,6 +94,31 @@ export class KubernetesRolloutsClient {
         token: this.token,
         namespace: app.rollout.namespace,
         rollout: app.rollout.name
+      }),
+      this.fetchImpl
+    );
+  }
+
+  async getReplicaSets(app) {
+    const data = await sendJsonRequest(
+      buildReplicaSetsRequest({
+        apiServer: this.apiServer,
+        token: this.token,
+        namespace: app.rollout.namespace,
+        labelSelector: `app.kubernetes.io/name=${app.rollout.name}`
+      }),
+      this.fetchImpl
+    );
+    return data.items || [];
+  }
+
+  async deleteReplicaSet(app, replicaSet) {
+    return sendJsonRequest(
+      buildReplicaSetDeleteRequest({
+        apiServer: this.apiServer,
+        token: this.token,
+        namespace: app.rollout.namespace,
+        replicaSet
       }),
       this.fetchImpl
     );

@@ -3,7 +3,9 @@ import assert from "node:assert/strict";
 import {
   buildRolloutGetRequest,
   buildRolloutActionRequest,
-  buildRolloutActionPatch
+  buildRolloutActionPatch,
+  buildReplicaSetsRequest,
+  buildReplicaSetDeleteRequest
 } from "../src/kubernetes.js";
 
 test("builds a Rollout get request against the Kubernetes API", () => {
@@ -54,4 +56,34 @@ test("uses the status subresource for promote and abort", () => {
   assert.equal(request.method, "PATCH");
   assert.equal(request.headers["Content-Type"], "application/merge-patch+json");
   assert.deepEqual(JSON.parse(request.body), { status: { promoteFull: true } });
+});
+
+test("builds a ReplicaSet list request for rollout revisions", () => {
+  const request = buildReplicaSetsRequest({
+    apiServer: "https://kubernetes.default.svc",
+    token: "kube-token",
+    namespace: "apps",
+    labelSelector: "app.kubernetes.io/name=hello"
+  });
+
+  assert.equal(
+    request.url,
+    "https://kubernetes.default.svc/apis/apps/v1/namespaces/apps/replicasets?labelSelector=app.kubernetes.io%2Fname%3Dhello"
+  );
+  assert.equal(request.method, "GET");
+});
+
+test("builds a ReplicaSet delete request for retained revisions", () => {
+  const request = buildReplicaSetDeleteRequest({
+    apiServer: "https://kubernetes.default.svc",
+    token: "kube-token",
+    namespace: "apps",
+    replicaSet: "hello-6d4f8b87c5"
+  });
+
+  assert.equal(
+    request.url,
+    "https://kubernetes.default.svc/apis/apps/v1/namespaces/apps/replicasets/hello-6d4f8b87c5"
+  );
+  assert.equal(request.method, "DELETE");
 });
