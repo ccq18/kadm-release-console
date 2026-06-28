@@ -347,14 +347,25 @@ function summarizeEvent(event) {
 }
 
 function summarizeDiagnostics(pods, events) {
-  const failedEvent = events.find((event) => event.type === "Warning");
+  const blockedPods = pods.filter(isBlockedPod);
+  if (blockedPods.length === 0) {
+    return null;
+  }
+
+  const blockedPodNames = new Set(blockedPods.map((pod) => pod.name));
+  const failedEvent = events.find(
+    (event) =>
+      event.type === "Warning" &&
+      (event.involvedKind === "Rollout" ||
+        (event.involvedKind === "Pod" && blockedPodNames.has(event.involvedName)))
+  );
   if (failedEvent) {
     return {
       severity: "error",
       message: failedEvent.message
     };
   }
-  const blockedPod = pods.find((pod) => pod.reason || pod.phase !== "Running");
+  const blockedPod = blockedPods[0];
   if (blockedPod) {
     return {
       severity: "warn",
@@ -362,6 +373,10 @@ function summarizeDiagnostics(pods, events) {
     };
   }
   return null;
+}
+
+function isBlockedPod(pod) {
+  return !pod.ready || Boolean(pod.reason) || pod.phase !== "Running";
 }
 
 function timestampOf(event) {

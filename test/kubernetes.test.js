@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  KubernetesRolloutsClient,
   buildRolloutGetRequest,
   buildRolloutActionRequest,
   buildRolloutActionPatch,
@@ -86,4 +87,49 @@ test("builds a ReplicaSet delete request for retained revisions", () => {
     "https://kubernetes.default.svc/apis/apps/v1/namespaces/apps/replicasets/hello-6d4f8b87c5"
   );
   assert.equal(request.method, "DELETE");
+});
+
+test("getDiagnostics ignores stale warning events once all current pods are ready", async () => {
+  const client = new KubernetesRolloutsClient({
+    apiServer: "https://kubernetes.default.svc",
+    token: "kube-token"
+  });
+
+  client.getPods = async () => [
+    {
+      metadata: { name: "hellospring-abc" },
+      spec: {
+        nodeName: "worker-1",
+        containers: [{ name: "hello", image: "ghcr.io/ccq18/demo-hello-spring:sha-1234567" }]
+      },
+      status: {
+        phase: "Running",
+        startTime: "2026-06-28T04:00:00Z",
+        containerStatuses: [
+          {
+            ready: true,
+            restartCount: 0,
+            state: { running: { startedAt: "2026-06-28T04:00:05Z" } }
+          }
+        ]
+      }
+    }
+  ];
+  client.getEvents = async () => [
+    {
+      type: "Warning",
+      reason: "Unhealthy",
+      message: "Readiness probe failed during startup",
+      involvedObject: { kind: "Pod", name: "hellospring-abc" },
+      lastTimestamp: "2026-06-28T04:00:08Z"
+    }
+  ];
+  client.getPodLogs = async () => "app is healthy";
+
+  const diagnostics = await client.getDiagnostics({
+    rollout: { namespace: "apps", name: "hellospring" }
+  });
+
+  assert.equal(diagnostics.summary, null);
+  assert.equal(diagnostics.pods[0].ready, true);
 });
