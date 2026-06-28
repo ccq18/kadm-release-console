@@ -195,7 +195,9 @@ export class ReleaseManager {
       if (isPaused(rolloutStatus)) {
         return {
           stage: "ready",
-          message: "发布已完成构建、部署和检查，正在等待放量。"
+          message: isBlueGreen(rollout)
+            ? "发布已完成构建与预发布检查，当前稳定版本仍在接流量，正在等待切换流量。"
+            : "发布已完成构建、部署和检查，正在等待放量。"
         };
       }
 
@@ -331,6 +333,10 @@ function describeDeployWait(syncStatus, operationPhase, rolloutPhase) {
 
 function isPaused(status) {
   return status.phase === "Paused" || (Array.isArray(status.pauseConditions) && status.pauseConditions.length > 0);
+}
+
+function isBlueGreen(rollout) {
+  return Boolean(rollout?.spec?.strategy?.blueGreen);
 }
 
 function isAborted(status) {

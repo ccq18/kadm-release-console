@@ -63,6 +63,64 @@ test("runs publish through build, deploy, and canary check", async () => {
   assert.deepEqual(events, ["runs", "dispatch:demo-hello:sha-abc1234", "runs", "runs", "gitops:demo-hello:sha-abc1234", "sync", "app", "rollout"]);
 });
 
+test("reports blue-green preview waiting for manual traffic switch", async () => {
+  let runPolls = 0;
+  const manager = new ReleaseManager({
+    github: {
+      async dispatchWorkflow() {},
+      async listWorkflowRuns() {
+        runPolls += 1;
+        if (runPolls === 1) {
+          return [];
+        }
+        return [{ id: 2, status: "completed", conclusion: "success", head_sha: "abcdef0", created_at: "2026-06-26T00:00:02.000Z" }];
+      },
+      async updateGitOpsApp() {}
+    },
+    argocd: {
+      async syncApplication() {},
+      async getApplication() {
+        return {
+          status: {
+            sync: { status: "Synced" },
+            operationState: { phase: "Succeeded" }
+          }
+        };
+      }
+    },
+    rollouts: {
+      async getRollout() {
+        return {
+          spec: {
+            strategy: {
+              blueGreen: {
+                activeService: "hello",
+                previewService: "hello-preview",
+                autoPromotionEnabled: false
+              }
+            }
+          },
+          status: {
+            phase: "Paused",
+            pauseConditions: [{ reason: "BlueGreenPause" }]
+          }
+        };
+      }
+    },
+    now: () => new Date("2026-06-26T00:00:00.000Z"),
+    sleep: async () => {}
+  });
+
+  const started = manager.start(app);
+  await manager.waitFor(app.id);
+  const completed = manager.getTask(app.id);
+
+  assert.equal(started.status, "running");
+  assert.equal(completed.status, "succeeded");
+  assert.equal(completed.stage, "ready");
+  assert.match(completed.message, /等待切换流量/);
+});
+
 test("waits for the workflow run created by this publish", async () => {
   let runPolls = 0;
   const manager = new ReleaseManager({
