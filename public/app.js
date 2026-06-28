@@ -5,6 +5,7 @@ import {
   nextRefreshDelayMs,
   releaseSteps
 } from "./release-state.js";
+import { diagnosticSurfaceState, renderDiagnosticsMarkup } from "./diagnostics-view.js";
 
 let apps = [];
 let effectiveProjects = [];
@@ -372,6 +373,7 @@ function renderStatus(status) {
       .join(" / ")
     : "暂无构建";
   const diagnostics = status.diagnostics || {};
+  const diagnosticState = diagnosticSurfaceState(diagnostics);
 
   document.querySelector("#syncState").textContent = localizeStatusText(sync);
   document.querySelector("#healthState").textContent = localizeStatusText(health);
@@ -394,9 +396,10 @@ function renderStatus(status) {
   document.querySelector("#versionDetails").textContent = JSON.stringify(versions, null, 2);
   document.querySelector("#rolloutDetails").textContent = JSON.stringify(status.rollout?.status || status.rollout, null, 2);
   document.querySelector("#diagnosticDetails").textContent = JSON.stringify(diagnostics, null, 2);
+  renderDiagnosticSurface(diagnosticState, diagnostics);
 
-  if (diagnostics.summary?.severity === "error") {
-    notice.textContent = `诊断：${diagnostics.summary.message}`;
+  if (diagnosticState.tone === "error") {
+    notice.textContent = `诊断：${diagnosticState.summary}`;
   }
 }
 
@@ -478,7 +481,7 @@ function renderStage(stage) {
 function stageStepMarkup(label, index, stage) {
   const current = stage.index === index;
   const done = stage.index > index;
-  const isErrorStage = ["aborted", "cancelled", "release_failed", "build_failed"].includes(stage.key);
+  const isErrorStage = ["aborted", "cancelled", "release_failed", "build_failed", "deploy_error"].includes(stage.key);
   const state = isErrorStage && current
     ? "error"
     : current
@@ -497,6 +500,19 @@ function stageStepMarkup(label, index, stage) {
     <strong class="stage-step-label">${escapeHtml(label)}</strong>
     <span class="stage-step-state">${escapeHtml(stateText)}</span>
   </li>`;
+}
+
+function renderDiagnosticSurface(state, diagnostics) {
+  const surface = document.querySelector("#diagnosticSurface");
+  const badge = document.querySelector("#diagnosticBadge");
+  document.querySelector("#diagnosticTitle").textContent = state.title;
+  document.querySelector("#diagnosticSummary").textContent = state.summary;
+  badge.textContent = state.badge;
+  badge.dataset.tone = state.tone;
+  surface.hidden = !state.visible;
+  document.querySelector("#diagnosticBody").innerHTML = state.visible
+    ? renderDiagnosticsMarkup(diagnostics)
+    : "";
 }
 
 function renderVersionInventory(versions) {

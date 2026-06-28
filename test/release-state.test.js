@@ -32,6 +32,22 @@ test("shows build in progress when workflow is still running", () => {
   assert.match(stage.nextStep, /等待构建完成/);
 });
 
+test("shows deploy error when diagnostics already found a blocking release issue", () => {
+  const stage = deriveReleaseStage({
+    argocd: { status: { sync: { status: "Synced" }, health: { status: "Progressing" } } },
+    rollout: { status: { phase: "Progressing" } },
+    workflowRuns: [{ status: "completed", conclusion: "success" }],
+    diagnostics: {
+      summary: { severity: "error", message: 'Error: secret "demo-db" not found' }
+    }
+  });
+
+  assert.equal(stage.key, "deploy_error");
+  assert.equal(stage.label, "部署异常");
+  assert.match(stage.description, /secret/);
+  assert.match(stage.nextStep, /运行诊断/);
+});
+
 test("shows deploy pending after build success but before argocd sync", () => {
   const stage = deriveReleaseStage({
     argocd: { status: { sync: { status: "OutOfSync" }, health: { status: "Healthy" } } },

@@ -78,6 +78,7 @@ export function deriveReleaseStage(status) {
   const latestRunFailed = latestRunDone && latestRun?.conclusion && latestRun?.conclusion !== "success";
   const isPaused = rolloutPhase === "Paused" || pauseConditions.length > 0;
   const isAborted = conditions.some((condition) => String(condition.reason || "").includes("Aborted"));
+  const blockingDiagnostic = getBlockingDiagnostic(status);
   const isHealthyRelease = syncStatus === "Synced" && rolloutPhase === "Healthy";
   const hasStableHealthyVersion = rolloutPhase === "Healthy" && hasNoPromotableCandidate(status);
 
@@ -91,6 +92,16 @@ export function deriveReleaseStage(status) {
 
   if (isAborted) {
     return stage("aborted", 2, "已终止", "本次发布已经被终止。", "排查原因后重新构建，或点重启重发当前版本。");
+  }
+
+  if (blockingDiagnostic) {
+    return stage(
+      "deploy_error",
+      isPaused ? 2 : 1,
+      "部署异常",
+      blockingDiagnostic.message,
+      "先看运行诊断里的 Pod、事件和日志，修复配置或依赖后再重新发布。"
+    );
   }
 
   if (operationPhase === "Running") {
@@ -145,7 +156,18 @@ function deriveTaskStage(task, status) {
     return null;
   }
 
+  const blockingDiagnostic = getBlockingDiagnostic(status);
+
   if (task.status === "running") {
+    if (task.stage !== "building" && blockingDiagnostic) {
+      return stage(
+        "deploy_error",
+        task.stage === "ready" ? 2 : 1,
+        "部署异常",
+        blockingDiagnostic.message,
+        "先看运行诊断里的 Pod、事件和日志，修复配置或依赖后再重新发布。"
+      );
+    }
     const index = task.stage === "building" ? 0 : task.stage === "deploying" ? 1 : 2;
     return stage(
       task.stage || "release_running",
@@ -191,6 +213,11 @@ function hasNoPromotableCandidate(status) {
   const versionsProveNoCandidate = versions.length > 0 && versions.every((version) => !version.canPromote);
 
   return versionsProveNoCandidate;
+}
+
+function getBlockingDiagnostic(status) {
+  const summary = status?.diagnostics?.summary;
+  return summary?.severity === "error" ? summary : null;
 }
 
 function stage(key, index, label, description, nextStep) {

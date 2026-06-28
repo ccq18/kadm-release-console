@@ -57,6 +57,18 @@
           <ol id="stageSteps" class="stage-steps"></ol>
         </section>
 
+        <section id="diagnosticSurface" class="diagnostic-surface" aria-label="Runtime diagnostics" hidden>
+          <div class="diagnostic-header">
+            <div>
+              <p class="eyebrow">运行诊断</p>
+              <h3 id="diagnosticTitle">等待检查</h3>
+            </div>
+            <span id="diagnosticBadge" class="diagnostic-badge" data-tone="neutral">正常</span>
+          </div>
+          <p id="diagnosticSummary" class="diagnostic-summary">当前没有需要展开的运行诊断。</p>
+          <div id="diagnosticBody" class="diagnostic-grid"></div>
+        </section>
+
         <section class="metrics-grid" aria-label="Release state">
           <article class="metric">
             <span>部署状态</span>

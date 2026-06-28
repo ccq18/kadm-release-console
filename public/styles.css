@@ -121,6 +121,7 @@ select {
 .topbar,
 .release-strip,
 .stage-panel,
+.diagnostic-surface,
 .metrics-grid,
 .details-grid,
 .project-layout {
@@ -214,6 +215,16 @@ input:disabled {
   background: var(--panel);
 }
 
+.diagnostic-surface {
+  display: grid;
+  gap: 14px;
+  margin-bottom: 16px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+}
+
 .stage-copy h3 {
   margin: 0 0 8px;
   font-size: 24px;
@@ -286,6 +297,110 @@ input:disabled {
 .stage-step[data-state="error"] {
   border-color: #e6b4af;
   background: #fff2f0;
+}
+
+.diagnostic-header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.diagnostic-header h3 {
+  margin: 0;
+  font-size: 22px;
+}
+
+.diagnostic-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 88px;
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  color: var(--muted);
+  background: #f8fafb;
+}
+
+.diagnostic-badge[data-tone="error"] {
+  border-color: #e6b4af;
+  color: var(--danger);
+  background: #fff2f0;
+}
+
+.diagnostic-badge[data-tone="warn"] {
+  border-color: #e6d39a;
+  color: var(--warn);
+  background: #fff9e8;
+}
+
+.diagnostic-summary {
+  margin: 0;
+  color: var(--ink);
+}
+
+.diagnostic-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.diagnostic-panel {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #f8fafb;
+}
+
+.diagnostic-panel h4 {
+  margin: 0 0 10px;
+  font-size: 14px;
+}
+
+.diagnostic-list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.diagnostic-item strong,
+.diagnostic-item span {
+  display: block;
+}
+
+.diagnostic-item span,
+.diagnostic-empty {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.diagnostic-item p {
+  margin: 6px 0 0;
+  overflow-wrap: anywhere;
+}
+
+.diagnostic-log-list {
+  display: grid;
+  gap: 10px;
+}
+
+.diagnostic-log-entry {
+  display: grid;
+  gap: 8px;
+}
+
+.diagnostic-log-entry strong {
+  font-size: 13px;
+}
+
+.diagnostic-log-entry pre {
+  min-height: 0;
+  max-height: 220px;
 }
 
 .tag-field,
@@ -617,6 +732,10 @@ pre {
 
   .stage-steps {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .diagnostic-grid {
+    grid-template-columns: 1fr;
   }
 
   .release-strip,
