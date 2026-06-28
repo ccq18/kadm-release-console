@@ -105,14 +105,16 @@ export function createApp({ apps, appRegistry, sourceProjectRegistry, github, ar
   server.get("/api/apps/:id/status", async (req, res, next) => {
     try {
       const app = await registry.getApp(req.params.id);
-      const [application, rollout, replicaSets, workflowRuns] = await Promise.allSettled([
+      const [application, rollout, replicaSets, workflowRuns, diagnostics] = await Promise.allSettled([
         argocd.getApplication(app),
         rollouts.getRollout(app),
         loadReplicaSets(rollouts, app),
-        github.listWorkflowRuns(app)
+        github.listWorkflowRuns(app),
+        loadDiagnostics(rollouts, app)
       ]);
       const rolloutValue = settledValue(rollout);
       const replicaSetsValue = settledValue(replicaSets, []);
+      const diagnosticsValue = settledValue(diagnostics, emptyDiagnostics());
 
       res.json({
         app: publicApp(app),
@@ -120,6 +122,7 @@ export function createApp({ apps, appRegistry, sourceProjectRegistry, github, ar
         rollout: rolloutValue,
         replicaSets: replicaSetsValue,
         workflowRuns: settledValue(workflowRuns, []),
+        diagnostics: diagnosticsValue,
         releaseTask: releases.getTask(app.id),
         versions: rollout.status === "fulfilled" ? deriveRolloutVersions(rolloutValue, replicaSetsValue) : []
       });
@@ -297,6 +300,22 @@ async function loadReplicaSets(rollouts, app) {
     return [];
   }
   return rollouts.getReplicaSets(app);
+}
+
+async function loadDiagnostics(rollouts, app) {
+  if (typeof rollouts.getDiagnostics !== "function") {
+    return emptyDiagnostics();
+  }
+  return rollouts.getDiagnostics(app);
+}
+
+function emptyDiagnostics() {
+  return {
+    summary: null,
+    pods: [],
+    events: [],
+    logs: []
+  };
 }
 
 function settledValue(result, fallback = null) {

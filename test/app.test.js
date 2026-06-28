@@ -62,6 +62,14 @@ test("status includes release task and derived versions", async () => {
     rollouts: {
       async getRollout() {
         return { status: { phase: "Paused", stableRS: "old-hash", currentPodHash: "new-hash" } };
+      },
+      async getDiagnostics() {
+        return {
+          summary: { severity: "error", message: 'Error: secret "demo-db" not found' },
+          pods: [{ name: "demo-0", phase: "Pending", reason: "CreateContainerConfigError" }],
+          events: [{ reason: "Failed", message: 'Error: secret "demo-db" not found' }],
+          logs: []
+        };
       }
     }
   });
@@ -71,6 +79,8 @@ test("status includes release task and derived versions", async () => {
 
     assert.equal(data.releaseTask.status, "running");
     assert.deepEqual(data.versions.map((version) => version.hash), ["new-hash", "old-hash"]);
+    assert.equal(data.diagnostics.summary.severity, "error");
+    assert.match(data.diagnostics.events[0].message, /secret/);
   } finally {
     await close(server);
   }

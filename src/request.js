@@ -2,6 +2,13 @@ import http from "node:http";
 import https from "node:https";
 
 export async function sendJsonRequest(request, fetchImpl = fetch) {
+  const text = await sendTextRequest(request, fetchImpl);
+  const data = text ? JSON.parse(text) : null;
+
+  return data;
+}
+
+export async function sendTextRequest(request, fetchImpl = fetch) {
   const response = request.insecureTLS
     ? await sendNodeJsonRequest(request)
     : await fetchImpl(request.url, {
@@ -11,17 +18,22 @@ export async function sendJsonRequest(request, fetchImpl = fetch) {
       });
 
   const text = typeof response.text === "function" ? await response.text() : response.text;
-  const data = text ? JSON.parse(text) : null;
 
   if (!response.ok) {
-    const message = data?.message || data?.error || response.statusText;
+    let data = null;
+    try {
+      data = text ? JSON.parse(text) : null;
+    } catch {
+      data = null;
+    }
+    const message = data?.message || data?.error || text || response.statusText;
     const error = new Error(`HTTP ${response.status}: ${message}`);
     error.status = response.status;
     error.response = data;
     throw error;
   }
 
-  return data;
+  return text;
 }
 
 export function joinUrl(baseUrl, path) {

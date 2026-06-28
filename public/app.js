@@ -371,6 +371,7 @@ function renderStatus(status) {
       .filter(Boolean)
       .join(" / ")
     : "暂无构建";
+  const diagnostics = status.diagnostics || {};
 
   document.querySelector("#syncState").textContent = localizeStatusText(sync);
   document.querySelector("#healthState").textContent = localizeStatusText(health);
@@ -392,6 +393,11 @@ function renderStatus(status) {
   document.querySelector("#workflowDetails").textContent = JSON.stringify(latestRun || status.workflowRuns, null, 2);
   document.querySelector("#versionDetails").textContent = JSON.stringify(versions, null, 2);
   document.querySelector("#rolloutDetails").textContent = JSON.stringify(status.rollout?.status || status.rollout, null, 2);
+  document.querySelector("#diagnosticDetails").textContent = JSON.stringify(diagnostics, null, 2);
+
+  if (diagnostics.summary?.severity === "error") {
+    notice.textContent = `诊断：${diagnostics.summary.message}`;
+  }
 }
 
 function renderCluster(cluster) {
