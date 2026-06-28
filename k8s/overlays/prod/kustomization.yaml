@@ -5,4 +5,4 @@ resources:
 images:
 - name: ghcr.io/ccq18/kadm-release-console
   newName: ghcr.io/ccq18/kadm-release-console
-  newTag: sha-57f0b51
+  newTag: local-cd7e37c-20260628121643
