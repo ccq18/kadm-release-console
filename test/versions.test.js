@@ -21,6 +21,8 @@ test("derives stable and candidate versions from Rollout status", () => {
   assert.equal(versions[1].hash, "old-hash");
   assert.equal(versions[1].isStable, true);
   assert.equal(versions[1].canSwitch, true);
+  assert.equal(versions[1].canDelete, true);
+  assert.equal(versions[1].receivingTraffic, false);
 });
 
 test("shows only the stable version when current hash already matches stable", () => {
@@ -37,7 +39,7 @@ test("shows only the stable version when current hash already matches stable", (
   assert.equal(versions[0].canSwitch, false);
 });
 
-test("includes retained revisions and marks only inactive ones deletable", () => {
+test("includes retained revisions and marks only non-live ones deletable", () => {
   const versions = deriveRolloutVersions(
     {
       status: {
@@ -92,10 +94,12 @@ test("validates that switch can target any non-current version", () => {
 
 test("validates that only inactive retained versions can be deleted", () => {
   const versions = [
-    { hash: "stable", role: "stable", canDelete: false, resourceName: "hello-stable" },
+    { hash: "stable", role: "stable", receivingTraffic: true, canDelete: false, resourceName: "hello-stable" },
+    { hash: "old-stable", role: "stable", receivingTraffic: false, canDelete: true, resourceName: "hello-old-stable" },
     { hash: "old", role: "retained", canDelete: true, resourceName: "hello-old" }
   ];
 
+  assert.equal(validateDeleteVersion(versions, "old-stable").resourceName, "hello-old-stable");
   assert.equal(validateDeleteVersion(versions, "old").resourceName, "hello-old");
   assert.throws(() => validateDeleteVersion(versions, "stable"), /cannot be deleted/);
   assert.throws(() => validateDeleteVersion(versions, "missing"), /Unknown version/);

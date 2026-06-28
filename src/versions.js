@@ -95,8 +95,8 @@ function deriveFallbackVersions(status, stableHash, currentHash, isPaused) {
       isStable: true,
       canPromote: false,
       canSwitch: Boolean(currentHash && currentHash !== stableHash),
-      canDelete: false,
-      receivingTraffic: true,
+      canDelete: Boolean(currentHash && currentHash !== stableHash),
+      receivingTraffic: stableHash === currentHash || !currentHash,
       replicas: {
         ready: status.readyReplicas || 0,
         total: status.replicas || 0
@@ -137,7 +137,7 @@ function deriveReplicaSetVersion(replicaSet, { stableHash, currentHash, isPaused
   const isCandidate = Boolean(currentHash && hash === currentHash && hash !== stableHash);
   const isStable = Boolean(stableHash && hash === stableHash);
   const isCurrent = hash === currentHash || (!currentHash && isStable);
-  const receivingTraffic = desired > 0;
+  const receivingTraffic = isCurrent;
   const canSwitch = isCandidate
     ? isPaused
     : isStable
@@ -152,7 +152,7 @@ function deriveReplicaSetVersion(replicaSet, { stableHash, currentHash, isPaused
     isStable,
     canPromote: isCandidate && isPaused,
     canSwitch,
-    canDelete: !isCandidate && !isStable && desired === 0 && ready === 0,
+    canDelete: !isCurrent,
     receivingTraffic,
     resourceName: replicaSet?.metadata?.name || null,
     createdAt: replicaSet?.metadata?.creationTimestamp || null,
