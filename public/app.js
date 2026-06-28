@@ -22,7 +22,6 @@ const notice = document.querySelector("#notice");
 const clusterNotice = document.querySelector("#clusterNotice");
 const projectNotice = document.querySelector("#projectNotice");
 const imageTagInput = document.querySelector("#imageTagInput");
-const versionSelect = document.querySelector("#versionSelect");
 const versionInventory = document.querySelector("#versionInventory");
 const releaseWorkspace = document.querySelector("#releaseWorkspace");
 const clusterWorkspace = document.querySelector("#clusterWorkspace");
@@ -46,7 +45,6 @@ document.querySelector("#refreshButton").addEventListener("click", () => refresh
 document.querySelector("#clusterRefreshButton").addEventListener("click", () => refreshCluster());
 document.querySelector("#projectRefreshButton").addEventListener("click", () => refreshProjectsRegistry());
 document.querySelector("#releaseButton").addEventListener("click", () => runAction("release"));
-document.querySelector("#promoteButton").addEventListener("click", () => runAction("promote"));
 document.querySelector("#cancelReleaseButton").addEventListener("click", () => runAction("release/cancel"));
 document.querySelector("#abortButton").addEventListener("click", () => runAction("rollout/abort"));
 clusterNavButton.addEventListener("click", () => showClusterView());
@@ -358,7 +356,6 @@ function renderStatus(status) {
   const versions = Array.isArray(status.versions) ? status.versions : [];
 
   appTitle.textContent = app.name;
-  renderVersions(versions);
   renderVersionInventory(versions);
   renderStage(stage);
   updateActionStates(stage, status, versions);
@@ -496,29 +493,6 @@ function stageStepMarkup(label, index, stage) {
   </li>`;
 }
 
-function renderVersions(versions) {
-  const previousValue = versionSelect.value;
-  const promotable = versions.filter((version) => version.canPromote);
-  versionSelect.innerHTML = "";
-
-  if (versions.length === 0) {
-    versionSelect.append(new Option("暂无版本", ""));
-    versionSelect.disabled = true;
-    return;
-  }
-
-  for (const version of versions) {
-    const label = `${version.label || version.role} ${version.hash}${version.canPromote ? "（可放量）" : ""}`;
-    const option = new Option(label, version.hash);
-    option.disabled = !version.canPromote;
-    versionSelect.append(option);
-  }
-
-  const preferred = promotable.find((version) => version.hash === previousValue) || promotable[0];
-  versionSelect.value = preferred?.hash || "";
-  versionSelect.disabled = promotable.length === 0;
-}
-
 function renderVersionInventory(versions) {
   versionInventory.innerHTML = versions.length
     ? versions
@@ -529,6 +503,9 @@ function renderVersionInventory(versions) {
               ? "稳定版本"
               : "历史版本";
           const trafficText = version.receivingTraffic ? "接入流量" : "无流量";
+          const switchButton = version.canSwitch
+            ? `<button class="secondary-action version-switch-button" type="button" data-version-hash="${escapeHtml(version.hash)}">切换</button>`
+            : "";
           const deleteButton = version.canDelete
             ? `<button class="secondary-action version-delete-button" type="button" data-version-hash="${escapeHtml(version.hash)}">删除版本</button>`
             : "";
@@ -536,9 +513,10 @@ function renderVersionInventory(versions) {
           return `<article class="version-row">
     <div>
       <strong>${escapeHtml(version.hash)}</strong>
-      <small>${escapeHtml(roleText)} / ${escapeHtml(trafficText)} / ${escapeHtml(version.replicas.ready)}/${escapeHtml(version.replicas.total)} Ready</small>
+      <small>${escapeHtml(roleText)} / ${escapeHtml(trafficText)} / ${escapeHtml(version.replicas.ready)}/${escapeHtml(version.replicas.total)} Ready / 创建于 ${escapeHtml(formatTimestamp(version.createdAt))}</small>
     </div>
     <div class="version-actions">
+      ${switchButton}
       ${deleteButton}
     </div>
   </article>`;
@@ -546,6 +524,9 @@ function renderVersionInventory(versions) {
         .join("")
     : `<p class="empty-state">暂无版本数据。</p>`;
 
+  for (const button of versionInventory.querySelectorAll(".version-switch-button")) {
+    button.addEventListener("click", () => switchVersion(button.getAttribute("data-version-hash")));
+  }
   for (const button of versionInventory.querySelectorAll(".version-delete-button")) {
     button.addEventListener("click", () => deleteVersion(button.getAttribute("data-version-hash")));
   }
@@ -553,7 +534,6 @@ function renderVersionInventory(versions) {
 
 function updateActionStates(stage, status, versions) {
   const releaseButton = document.querySelector("#releaseButton");
-  const promoteButton = document.querySelector("#promoteButton");
   const cancelReleaseButton = document.querySelector("#cancelReleaseButton");
   const abortButton = document.querySelector("#abortButton");
   const releaseRunning = status.releaseTask?.status === "running";
@@ -563,7 +543,6 @@ function updateActionStates(stage, status, versions) {
 
   imageTagInput.disabled = releaseRunning;
   releaseButton.disabled = releaseRunning || hasPromotableVersion || rolloutPhase === "Progressing";
-  promoteButton.disabled = releaseRunning || !hasPromotableVersion;
   cancelReleaseButton.disabled = !releaseRunning;
   abortButton.disabled = releaseRunning || !(hasPromotableVersion || rolloutBusy || stage.key === "checking");
 }
@@ -572,10 +551,28 @@ function actionBody(action) {
   if (action === "release" && imageTagInput.value.trim()) {
     return { imageTag: imageTagInput.value.trim() };
   }
-  if (action === "promote" && versionSelect.value) {
-    return { versionHash: versionSelect.value };
-  }
   return {};
+}
+
+async function switchVersion(versionHash) {
+  if (!activeAppId || !versionHash) {
+    return;
+  }
+  const confirmed = window.confirm(`确认把所有流量切换到版本 ${versionHash} 吗？`);
+  if (!confirmed) {
+    return;
+  }
+
+  try {
+    notice.textContent = `正在切换到版本 ${versionHash}`;
+    await api(`/api/apps/${encodeURIComponent(activeAppId)}/versions/${encodeURIComponent(versionHash)}/switch`, {
+      method: "POST"
+    });
+    notice.textContent = `已切换到版本 ${versionHash}`;
+    await refreshStatus();
+  } catch (error) {
+    notice.textContent = `切换版本失败：${error.message}`;
+  }
 }
 
 async function deleteVersion(versionHash) {
@@ -665,6 +662,19 @@ function projectToApp(project) {
     argocd: project.argocd,
     rollout: project.rollout
   };
+}
+
+function formatTimestamp(value) {
+  if (!value) {
+    return "未知";
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+  return date.toLocaleString("zh-CN", {
+    hour12: false
+  });
 }
 
 function escapeHtml(value) {

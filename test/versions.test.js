@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { deriveRolloutVersions, validateDeleteVersion, validatePromoteVersion } from "../src/versions.js";
+import { deriveRolloutVersions, validateDeleteVersion, validatePromoteVersion, validateSwitchVersion } from "../src/versions.js";
 
 test("derives stable and candidate versions from Rollout status", () => {
   const versions = deriveRolloutVersions({
@@ -16,10 +16,11 @@ test("derives stable and candidate versions from Rollout status", () => {
 
   assert.deepEqual(versions.map((version) => version.role), ["candidate", "stable"]);
   assert.equal(versions[0].hash, "new-hash");
-  assert.equal(versions[0].canPromote, true);
+  assert.equal(versions[0].canSwitch, true);
   assert.equal(versions[0].replicas.ready, 1);
   assert.equal(versions[1].hash, "old-hash");
   assert.equal(versions[1].isStable, true);
+  assert.equal(versions[1].canSwitch, true);
 });
 
 test("shows only the stable version when current hash already matches stable", () => {
@@ -33,7 +34,7 @@ test("shows only the stable version when current hash already matches stable", (
 
   assert.equal(versions.length, 1);
   assert.equal(versions[0].role, "stable");
-  assert.equal(versions[0].canPromote, false);
+  assert.equal(versions[0].canSwitch, false);
 });
 
 test("includes retained revisions and marks only inactive ones deletable", () => {
@@ -71,19 +72,22 @@ test("includes retained revisions and marks only inactive ones deletable", () =>
 
   assert.deepEqual(versions.map((version) => version.role), ["stable", "retained"]);
   assert.equal(versions[1].hash, "old-hash");
+  assert.equal(versions[1].canSwitch, true);
   assert.equal(versions[1].canDelete, true);
   assert.equal(versions[1].resourceName, "hello-old-hash");
 });
 
-test("validates that promote can only target the current candidate", () => {
+test("validates that switch can target any non-current version", () => {
   const versions = [
-    { hash: "new-hash", role: "candidate", canPromote: true },
-    { hash: "old-hash", role: "stable", canPromote: false }
+    { hash: "new-hash", role: "candidate", canSwitch: true, resourceName: "hello-new" },
+    { hash: "old-hash", role: "retained", canSwitch: true, resourceName: "hello-old" },
+    { hash: "stable-hash", role: "stable", canSwitch: false, resourceName: "hello-stable" }
   ];
 
-  assert.equal(validatePromoteVersion(versions, "new-hash").hash, "new-hash");
-  assert.throws(() => validatePromoteVersion(versions, "old-hash"), /not promotable/);
-  assert.throws(() => validatePromoteVersion(versions, "missing-hash"), /Unknown version/);
+  assert.equal(validateSwitchVersion(versions, "new-hash").hash, "new-hash");
+  assert.equal(validateSwitchVersion(versions, "old-hash").hash, "old-hash");
+  assert.throws(() => validateSwitchVersion(versions, "stable-hash"), /not switchable/);
+  assert.throws(() => validateSwitchVersion(versions, "missing-hash"), /Unknown version/);
 });
 
 test("validates that only inactive retained versions can be deleted", () => {

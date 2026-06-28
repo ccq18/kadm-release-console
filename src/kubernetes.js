@@ -38,6 +38,14 @@ export function buildReplicaSetDeleteRequest({ apiServer, token, namespace, repl
   };
 }
 
+export function buildRolloutTemplatePatch(template) {
+  return {
+    spec: {
+      template
+    }
+  };
+}
+
 export function buildRolloutActionPatch(action, now = new Date()) {
   if (action === "promote") {
     return { status: { promoteFull: true } };
@@ -64,6 +72,17 @@ export function buildRolloutActionRequest({ apiServer, token, namespace, rollout
       "Content-Type": "application/merge-patch+json"
     }),
     body: JSON.stringify(buildRolloutActionPatch(action, now))
+  };
+}
+
+export function buildRolloutTemplatePatchRequest({ apiServer, token, namespace, rollout, template }) {
+  return {
+    url: rolloutUrl(apiServer, namespace, rollout),
+    method: "PATCH",
+    headers: jsonHeaders(token, {
+      "Content-Type": "application/merge-patch+json"
+    }),
+    body: JSON.stringify(buildRolloutTemplatePatch(template))
   };
 }
 
@@ -124,6 +143,37 @@ export class KubernetesRolloutsClient {
     );
   }
 
+  async switchVersion(app, version, replicaSets) {
+    const replicaSet = replicaSets.find(
+      (candidate) => candidate.metadata?.name === version.resourceName
+    );
+    if (!replicaSet?.spec?.template) {
+      throw new Error(`ReplicaSet template not found for version: ${version.hash}`);
+    }
+
+    await sendJsonRequest(
+      buildRolloutTemplatePatchRequest({
+        apiServer: this.apiServer,
+        token: this.token,
+        namespace: app.rollout.namespace,
+        rollout: app.rollout.name,
+        template: sanitizeReplicaSetTemplate(replicaSet.spec.template)
+      }),
+      this.fetchImpl
+    );
+
+    return sendJsonRequest(
+      buildRolloutActionRequest({
+        apiServer: this.apiServer,
+        token: this.token,
+        namespace: app.rollout.namespace,
+        rollout: app.rollout.name,
+        action: "promote"
+      }),
+      this.fetchImpl
+    );
+  }
+
   async runAction(app, action) {
     return sendJsonRequest(
       buildRolloutActionRequest({
@@ -136,6 +186,21 @@ export class KubernetesRolloutsClient {
       this.fetchImpl
     );
   }
+}
+
+function sanitizeReplicaSetTemplate(template) {
+  const clone = structuredClone(template);
+  if (clone.metadata?.labels) {
+    delete clone.metadata.labels["rollouts-pod-template-hash"];
+    delete clone.metadata.labels["pod-template-hash"];
+  }
+  if (clone.metadata) {
+    delete clone.metadata.creationTimestamp;
+    delete clone.metadata.uid;
+    delete clone.metadata.resourceVersion;
+    delete clone.metadata.managedFields;
+  }
+  return clone;
 }
 
 function rolloutUrl(apiServer, namespace, rollout) {

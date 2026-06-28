@@ -192,7 +192,7 @@ input:disabled {
 
 .release-strip {
   display: grid;
-  grid-template-columns: minmax(220px, 1fr) minmax(180px, 260px) repeat(4, auto);
+  grid-template-columns: minmax(220px, 1fr) repeat(3, auto);
   gap: 10px;
   align-items: end;
   margin-bottom: 16px;

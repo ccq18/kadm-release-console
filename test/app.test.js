@@ -132,7 +132,7 @@ test("promote route validates the selected candidate version", async () => {
   }
 });
 
-test("promote route rejects non-promotable stable version selection", async () => {
+test("promote route rejects switching to the current stable version", async () => {
   const server = await listen({
     rollouts: {
       async getRollout() {
@@ -154,6 +154,57 @@ test("promote route rejects non-promotable stable version selection", async () =
 
     assert.equal(response.status, 409);
     assert.match(data.error, /not promotable/);
+  } finally {
+    await close(server);
+  }
+});
+
+test("switch route moves all traffic to a retained version", async () => {
+  const calls = [];
+  const server = await listen({
+    rollouts: {
+      async getRollout() {
+        return { status: { phase: "Healthy", stableRS: "new-hash", currentPodHash: "new-hash" } };
+      },
+      async getReplicaSets() {
+        return [
+          {
+            metadata: {
+              name: "hello-new-hash",
+              creationTimestamp: "2026-06-28T00:00:00Z",
+              labels: { "rollouts-pod-template-hash": "new-hash" }
+            },
+            spec: { replicas: 2, template: { metadata: { labels: { "app.kubernetes.io/name": "hello" } }, spec: { containers: [{ name: "hello", image: "new" }] } } },
+            status: { replicas: 2, readyReplicas: 2 }
+          },
+          {
+            metadata: {
+              name: "hello-old-hash",
+              creationTimestamp: "2026-06-27T00:00:00Z",
+              labels: { "rollouts-pod-template-hash": "old-hash" }
+            },
+            spec: { replicas: 0, template: { metadata: { labels: { "app.kubernetes.io/name": "hello" } }, spec: { containers: [{ name: "hello", image: "old" }] } } },
+            status: { replicas: 0, readyReplicas: 0 }
+          }
+        ];
+      },
+      async switchVersion(app, version) {
+        calls.push({ appId: app.id, hash: version.hash, resourceName: version.resourceName });
+        return { switched: true };
+      },
+      async runAction() {
+        return {};
+      }
+    }
+  });
+
+  try {
+    const data = await request(server, "/api/apps/demo-hello/versions/old-hash/switch", {
+      method: "POST"
+    });
+
+    assert.equal(data.version.hash, "old-hash");
+    assert.deepEqual(calls, [{ appId: "demo-hello", hash: "old-hash", resourceName: "hello-old-hash" }]);
   } finally {
     await close(server);
   }

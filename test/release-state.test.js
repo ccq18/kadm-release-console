@@ -53,7 +53,7 @@ test("shows checking when rollout is paused and waiting for promote", () => {
 
   assert.equal(stage.key, "checking");
   assert.equal(stage.label, "检查中");
-  assert.match(stage.nextStep, /确认正常后点放量/);
+  assert.match(stage.nextStep, /版本列表里切换到目标版本/);
 });
 
 test("shows released when sync and rollout are both healthy", () => {

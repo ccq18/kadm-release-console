@@ -3,7 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { ReleaseManager } from "./release-manager.js";
 import { createStaticAppRegistry, createStaticSourceProjectRegistry, publicProject } from "./projects.js";
-import { deriveRolloutVersions, validateDeleteVersion, validatePromoteVersion } from "./versions.js";
+import { deriveRolloutVersions, validateDeleteVersion, validatePromoteVersion, validateSwitchVersion } from "./versions.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -153,6 +153,21 @@ export function createApp({ apps, appRegistry, sourceProjectRegistry, github, ar
       ]);
       const version = validateDeleteVersion(deriveRolloutVersions(rollout, replicaSets), req.params.hash);
       const result = await rollouts.deleteReplicaSet(app, version.resourceName);
+      res.status(202).json({ app: publicApp(app), version, result });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  server.post("/api/apps/:id/versions/:hash/switch", async (req, res, next) => {
+    try {
+      const app = await registry.getApp(req.params.id);
+      const [rollout, replicaSets] = await Promise.all([
+        rollouts.getRollout(app),
+        loadReplicaSets(rollouts, app)
+      ]);
+      const version = validateSwitchVersion(deriveRolloutVersions(rollout, replicaSets), req.params.hash);
+      const result = await rollouts.switchVersion(app, version, replicaSets);
       res.status(202).json({ app: publicApp(app), version, result });
     } catch (error) {
       next(error);

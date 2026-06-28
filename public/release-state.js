@@ -106,7 +106,7 @@ export function deriveReleaseStage(status) {
   }
 
   if (isPaused) {
-    return stage("checking", 2, "检查中", "新版本已经进到金丝雀阶段，正在等待人工确认。", "确认正常后点放量；有问题就点终止。");
+    return stage("checking", 2, "检查中", "新版本已经进到金丝雀阶段，正在等待人工确认。", "确认正常后在版本列表里切换到目标版本；有问题就点终止。");
   }
 
   if (syncStatus === "Synced" && rolloutPhase && rolloutPhase !== "Healthy") {

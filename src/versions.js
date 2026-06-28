@@ -35,6 +35,21 @@ export function validatePromoteVersion(versions, versionHash) {
   return version;
 }
 
+export function validateSwitchVersion(versions, versionHash) {
+  const version = versions.find((candidate) => candidate.hash === versionHash);
+  if (!version) {
+    const error = new Error(`Unknown version: ${versionHash}`);
+    error.status = 400;
+    throw error;
+  }
+  if (!version.canSwitch || !version.resourceName) {
+    const error = new Error(`Version ${versionHash} is not switchable.`);
+    error.status = 409;
+    throw error;
+  }
+  return version;
+}
+
 export function validateDeleteVersion(versions, versionHash) {
   const version = versions.find((candidate) => candidate.hash === versionHash);
   if (!version) {
@@ -61,6 +76,7 @@ function deriveFallbackVersions(status, stableHash, currentHash, isPaused) {
       isCurrent: true,
       isStable: false,
       canPromote: isPaused,
+      canSwitch: isPaused,
       canDelete: false,
       receivingTraffic: true,
       replicas: {
@@ -78,6 +94,7 @@ function deriveFallbackVersions(status, stableHash, currentHash, isPaused) {
       isCurrent: stableHash === currentHash || !currentHash,
       isStable: true,
       canPromote: false,
+      canSwitch: Boolean(currentHash && currentHash !== stableHash),
       canDelete: false,
       receivingTraffic: true,
       replicas: {
@@ -93,6 +110,7 @@ function deriveFallbackVersions(status, stableHash, currentHash, isPaused) {
       isCurrent: true,
       isStable: false,
       canPromote: false,
+      canSwitch: false,
       canDelete: false,
       receivingTraffic: true,
       replicas: {
@@ -120,6 +138,11 @@ function deriveReplicaSetVersion(replicaSet, { stableHash, currentHash, isPaused
   const isStable = Boolean(stableHash && hash === stableHash);
   const isCurrent = hash === currentHash || (!currentHash && isStable);
   const receivingTraffic = desired > 0;
+  const canSwitch = isCandidate
+    ? isPaused
+    : isStable
+      ? Boolean(currentHash && currentHash !== stableHash)
+      : true;
 
   return {
     hash,
@@ -128,6 +151,7 @@ function deriveReplicaSetVersion(replicaSet, { stableHash, currentHash, isPaused
     isCurrent,
     isStable,
     canPromote: isCandidate && isPaused,
+    canSwitch,
     canDelete: !isCandidate && !isStable && desired === 0 && ready === 0,
     receivingTraffic,
     resourceName: replicaSet?.metadata?.name || null,
