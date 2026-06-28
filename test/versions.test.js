@@ -20,9 +20,9 @@ test("derives stable and candidate versions from Rollout status", () => {
   assert.equal(versions[0].replicas.ready, 1);
   assert.equal(versions[1].hash, "old-hash");
   assert.equal(versions[1].isStable, true);
-  assert.equal(versions[1].canSwitch, true);
-  assert.equal(versions[1].canDelete, true);
-  assert.equal(versions[1].receivingTraffic, false);
+  assert.equal(versions[1].canSwitch, false);
+  assert.equal(versions[1].canDelete, false);
+  assert.equal(versions[1].receivingTraffic, true);
 });
 
 test("shows only the stable version when current hash already matches stable", () => {
@@ -103,4 +103,60 @@ test("validates that only inactive retained versions can be deleted", () => {
   assert.equal(validateDeleteVersion(versions, "old").resourceName, "hello-old");
   assert.throws(() => validateDeleteVersion(versions, "stable"), /cannot be deleted/);
   assert.throws(() => validateDeleteVersion(versions, "missing"), /Unknown version/);
+});
+
+test("blue-green preview keeps traffic on the stable version before manual switch", () => {
+  const versions = deriveRolloutVersions(
+    {
+      spec: {
+        strategy: {
+          blueGreen: {
+            activeService: "hello",
+            previewService: "hello-preview",
+            autoPromotionEnabled: false
+          }
+        }
+      },
+      status: {
+        phase: "Paused",
+        stableRS: "stable-hash",
+        currentPodHash: "preview-hash",
+        readyReplicas: 3,
+        replicas: 3,
+        updatedReplicas: 3,
+        updatedReadyReplicas: 3,
+        pauseConditions: [{ reason: "BlueGreenPause" }]
+      }
+    },
+    [
+      {
+        metadata: {
+          name: "hello-preview-hash",
+          creationTimestamp: "2026-06-28T06:12:21Z",
+          labels: { "rollouts-pod-template-hash": "preview-hash" }
+        },
+        spec: { replicas: 3 },
+        status: { replicas: 3, readyReplicas: 3 }
+      },
+      {
+        metadata: {
+          name: "hello-stable-hash",
+          creationTimestamp: "2026-06-28T01:28:58Z",
+          labels: { "rollouts-pod-template-hash": "stable-hash" }
+        },
+        spec: { replicas: 3 },
+        status: { replicas: 3, readyReplicas: 3 }
+      }
+    ]
+  );
+
+  assert.equal(versions[0].hash, "preview-hash");
+  assert.equal(versions[0].role, "candidate");
+  assert.equal(versions[0].receivingTraffic, false);
+  assert.equal(versions[0].canSwitch, true);
+  assert.equal(versions[1].hash, "stable-hash");
+  assert.equal(versions[1].role, "stable");
+  assert.equal(versions[1].receivingTraffic, true);
+  assert.equal(versions[1].canSwitch, false);
+  assert.equal(versions[1].canDelete, false);
 });

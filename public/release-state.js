@@ -79,6 +79,7 @@ export function deriveReleaseStage(status) {
   const isPaused = rolloutPhase === "Paused" || pauseConditions.length > 0;
   const isAborted = conditions.some((condition) => String(condition.reason || "").includes("Aborted"));
   const blockingDiagnostic = getBlockingDiagnostic(status);
+  const strategyMode = deriveStrategyMode(status.rollout);
   const isHealthyRelease = syncStatus === "Synced" && rolloutPhase === "Healthy";
   const hasStableHealthyVersion = rolloutPhase === "Healthy" && hasNoPromotableCandidate(status);
 
@@ -117,6 +118,15 @@ export function deriveReleaseStage(status) {
   }
 
   if (isPaused) {
+    if (strategyMode === "blueGreen") {
+      return stage(
+        "checking",
+        2,
+        "检查中",
+        "新版本已经完成预发布，当前稳定版本仍在接流量。",
+        "确认正常后在版本列表里切换到目标版本；有问题就点终止。"
+      );
+    }
     return stage("checking", 2, "检查中", "新版本已经进到金丝雀阶段，正在等待人工确认。", "确认正常后在版本列表里切换到目标版本；有问题就点终止。");
   }
 
@@ -218,6 +228,13 @@ function hasNoPromotableCandidate(status) {
 function getBlockingDiagnostic(status) {
   const summary = status?.diagnostics?.summary;
   return summary?.severity === "error" ? summary : null;
+}
+
+function deriveStrategyMode(rollout) {
+  if (rollout?.spec?.strategy?.blueGreen) {
+    return "blueGreen";
+  }
+  return "canary";
 }
 
 function stage(key, index, label, description, nextStep) {

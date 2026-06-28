@@ -1,15 +1,16 @@
 export function deriveRolloutVersions(rollout, replicaSets = []) {
   const status = rollout?.status || {};
+  const strategyMode = deriveStrategyMode(rollout);
   const stableHash = status.stableRS || status.canary?.stableRS || null;
   const currentHash = status.currentPodHash || status.updatedPodHash || null;
   const isPaused = status.phase === "Paused" || hasPauseConditions(status);
 
   if (!Array.isArray(replicaSets) || replicaSets.length === 0) {
-    return dedupeByHash(deriveFallbackVersions(status, stableHash, currentHash, isPaused));
+    return dedupeByHash(deriveFallbackVersions(status, stableHash, currentHash, isPaused, strategyMode));
   }
 
   const versions = replicaSets
-    .map((replicaSet) => deriveReplicaSetVersion(replicaSet, { stableHash, currentHash, isPaused }))
+    .map((replicaSet) => deriveReplicaSetVersion(replicaSet, { stableHash, currentHash, isPaused, strategyMode }))
     .filter(Boolean)
     .sort((left, right) => compareVersions(left, right, stableHash, currentHash));
 
@@ -65,8 +66,9 @@ export function validateDeleteVersion(versions, versionHash) {
   return version;
 }
 
-function deriveFallbackVersions(status, stableHash, currentHash, isPaused) {
+function deriveFallbackVersions(status, stableHash, currentHash, isPaused, strategyMode) {
   const versions = [];
+  const previewOnly = strategyMode === "blueGreen" && stableHash && currentHash && currentHash !== stableHash;
 
   if (currentHash && currentHash !== stableHash) {
     versions.push({
@@ -78,7 +80,7 @@ function deriveFallbackVersions(status, stableHash, currentHash, isPaused) {
       canPromote: isPaused,
       canSwitch: isPaused,
       canDelete: false,
-      receivingTraffic: true,
+      receivingTraffic: !previewOnly,
       replicas: {
         ready: status.updatedReadyReplicas || 0,
         total: status.updatedReplicas || status.replicas || 0
@@ -94,9 +96,17 @@ function deriveFallbackVersions(status, stableHash, currentHash, isPaused) {
       isCurrent: stableHash === currentHash || !currentHash,
       isStable: true,
       canPromote: false,
-      canSwitch: Boolean(currentHash && currentHash !== stableHash),
-      canDelete: Boolean(currentHash && currentHash !== stableHash),
-      receivingTraffic: stableHash === currentHash || !currentHash,
+      canSwitch: false,
+      canDelete: false,
+      receivingTraffic: receivesTraffic({
+        strategyMode,
+        stableHash,
+        currentHash,
+        hash: stableHash,
+        isStable: true,
+        isCurrent: stableHash === currentHash || !currentHash,
+        isCandidate: false
+      }),
       replicas: {
         ready: status.readyReplicas || 0,
         total: status.replicas || 0
@@ -123,7 +133,7 @@ function deriveFallbackVersions(status, stableHash, currentHash, isPaused) {
   return versions;
 }
 
-function deriveReplicaSetVersion(replicaSet, { stableHash, currentHash, isPaused }) {
+function deriveReplicaSetVersion(replicaSet, { stableHash, currentHash, isPaused, strategyMode }) {
   const hash =
     replicaSet?.metadata?.labels?.["rollouts-pod-template-hash"] ||
     replicaSet?.metadata?.labels?.["pod-template-hash"] ||
@@ -137,12 +147,16 @@ function deriveReplicaSetVersion(replicaSet, { stableHash, currentHash, isPaused
   const isCandidate = Boolean(currentHash && hash === currentHash && hash !== stableHash);
   const isStable = Boolean(stableHash && hash === stableHash);
   const isCurrent = hash === currentHash || (!currentHash && isStable);
-  const receivingTraffic = isCurrent;
-  const canSwitch = isCandidate
-    ? isPaused
-    : isStable
-      ? Boolean(currentHash && currentHash !== stableHash)
-      : true;
+  const receivingTraffic = receivesTraffic({
+    strategyMode,
+    stableHash,
+    currentHash,
+    hash,
+    isStable,
+    isCurrent,
+    isCandidate
+  });
+  const canSwitch = isCandidate ? isPaused : isStable ? false : true;
 
   return {
     hash,
@@ -152,7 +166,7 @@ function deriveReplicaSetVersion(replicaSet, { stableHash, currentHash, isPaused
     isStable,
     canPromote: isCandidate && isPaused,
     canSwitch,
-    canDelete: !isCurrent,
+    canDelete: !isCurrent && !receivingTraffic,
     receivingTraffic,
     resourceName: replicaSet?.metadata?.name || null,
     createdAt: replicaSet?.metadata?.creationTimestamp || null,
@@ -186,6 +200,31 @@ function compareCreatedAt(left, right) {
 
 function hasPauseConditions(status) {
   return Array.isArray(status.pauseConditions) && status.pauseConditions.length > 0;
+}
+
+function deriveStrategyMode(rollout) {
+  if (rollout?.spec?.strategy?.blueGreen) {
+    return "blueGreen";
+  }
+  return "canary";
+}
+
+function receivesTraffic({ strategyMode, stableHash, currentHash, hash, isStable, isCurrent, isCandidate }) {
+  if (strategyMode === "blueGreen") {
+    if (!stableHash) {
+      return isCurrent;
+    }
+    if (currentHash && currentHash !== stableHash) {
+      return isStable;
+    }
+    return isCurrent;
+  }
+
+  if (currentHash && stableHash && currentHash !== stableHash) {
+    return isCandidate || isStable;
+  }
+
+  return isCurrent;
 }
 
 function dedupeByHash(versions) {

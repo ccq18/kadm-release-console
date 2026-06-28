@@ -63,12 +63,24 @@ test("shows deploy pending after build success but before argocd sync", () => {
 test("shows checking when rollout is paused and waiting for promote", () => {
   const stage = deriveReleaseStage({
     argocd: { status: { sync: { status: "Synced" }, health: { status: "Healthy" } } },
-    rollout: { status: { phase: "Paused", pauseConditions: [{ reason: "CanaryPauseStep" }] } },
+    rollout: {
+      spec: {
+        strategy: {
+          blueGreen: {
+            activeService: "hello",
+            previewService: "hello-preview",
+            autoPromotionEnabled: false
+          }
+        }
+      },
+      status: { phase: "Paused", pauseConditions: [{ reason: "BlueGreenPause" }] }
+    },
     workflowRuns: [{ status: "completed", conclusion: "success" }]
   });
 
   assert.equal(stage.key, "checking");
   assert.equal(stage.label, "检查中");
+  assert.match(stage.description, /稳定版本/);
   assert.match(stage.nextStep, /版本列表里切换到目标版本/);
 });
 
