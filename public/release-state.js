@@ -6,6 +6,7 @@ const STATUS_LABELS = {
   Healthy: "健康",
   Degraded: "异常",
   Progressing: "进行中",
+  Suspended: "已暂停",
   Paused: "已暂停",
   Synced: "已部署",
   OutOfSync: "未部署",
